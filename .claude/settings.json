@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(timeout 15 ssh -i /c/Users/maksb/AppData/Local/Temp/claude/c--Users-maksb-OneDrive-Desktop-VPN-Service/562ea9e8-b0a6-4452-978e-060659c4608c/scratchpad/ssh/vpn_deploy_key -o BatchMode=yes -o ConnectTimeout=10 root@31.70.113.93 ' *)"
+    ]
+  }
+}
