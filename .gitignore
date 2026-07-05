@@ -1,0 +1,6 @@
+.env
+*.env
+xray_config.json
+*.pem
+*.key
+vps/.env
