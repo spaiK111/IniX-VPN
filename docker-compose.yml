@@ -6,6 +6,7 @@ services:
     network_mode: host
     volumes:
       - /var/lib/marzban:/var/lib/marzban
+      - /etc/letsencrypt:/etc/letsencrypt:ro
 
   telegram-bot:
     image: ghcr.io/spaik111/vpn-service-bot:latest

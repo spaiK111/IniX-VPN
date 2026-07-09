@@ -1,0 +1,409 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{{ user.username }} — INIX VPN</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+    <style>
+        :root {
+            --bg: #0B0D10;
+            --panel: #12151A;
+            --panel-2: #16181C;
+            --border: rgba(255, 255, 255, 0.08);
+            --text: #E8E9EC;
+            --text-dim: rgba(232, 233, 236, 0.6);
+            --text-faint: rgba(232, 233, 236, 0.4);
+            --accent: #3B5BFF;
+            --accent-light: rgba(119, 151, 255, 1);
+            --accent-soft: rgba(59, 91, 255, 0.15);
+            --accent-edge: rgba(59, 91, 255, 0.3);
+            --green: #5A9E6F;
+            --red: #E35D4B;
+            --amber: #E5A93A;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        html,
+        body {
+            margin: 0;
+            padding: 0;
+            background: var(--bg);
+            min-height: 100%;
+        }
+
+        body {
+            color: var(--text);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+            -webkit-font-smoothing: antialiased;
+            padding: 32px 16px 60px;
+        }
+
+        .wrap {
+            max-width: 640px;
+            margin: 0 auto;
+        }
+
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 28px;
+            font-family: ui-monospace, "SF Mono", Menlo, monospace;
+            font-size: 22px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.6px;
+            color: var(--text);
+        }
+
+        .brand .dot {
+            width: 11px;
+            height: 11px;
+            border-radius: 999px;
+            background: var(--accent);
+            box-shadow: 0 0 12px 2px var(--accent-edge);
+        }
+
+        .card {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            border-radius: 14px;
+            box-shadow: 0 40px 100px -30px var(--accent-edge), 0 20px 40px -20px rgba(0, 0, 0, 0.5);
+            padding: 28px;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 20px;
+            margin: 0 0 4px;
+            font-weight: 600;
+        }
+
+        .row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+
+        .badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 4px 12px;
+            border-radius: 999px;
+            font-size: 11px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            font-family: ui-monospace, "SF Mono", Menlo, monospace;
+        }
+
+        .badge.active {
+            background: rgba(90, 158, 111, 0.15);
+            color: var(--green);
+            border: 1px solid rgba(90, 158, 111, 0.3);
+        }
+
+        .badge.disabled {
+            background: rgba(232, 233, 236, 0.08);
+            color: var(--text-faint);
+            border: 1px solid var(--border);
+        }
+
+        .badge.limited {
+            background: rgba(227, 93, 75, 0.15);
+            color: var(--red);
+            border: 1px solid rgba(227, 93, 75, 0.3);
+        }
+
+        .badge.expired {
+            background: rgba(229, 169, 58, 0.15);
+            color: var(--amber);
+            border: 1px solid rgba(229, 169, 58, 0.3);
+        }
+
+        .badge.on_hold {
+            background: var(--accent-soft);
+            color: var(--accent-light);
+            border: 1px solid var(--accent-edge);
+        }
+
+        .meta {
+            margin-top: 20px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+        }
+
+        .meta .item {
+            background: rgba(255, 255, 255, 0.03);
+            border-radius: 8px;
+            padding: 12px 14px;
+        }
+
+        .meta .label {
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-faint);
+            margin-bottom: 4px;
+        }
+
+        .meta .value {
+            font-size: 14px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        .progress-track {
+            margin-top: 10px;
+            height: 6px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.06);
+            overflow: hidden;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: linear-gradient(90deg, var(--accent-light), var(--accent));
+            border-radius: 999px;
+        }
+
+        .section-title {
+            font-size: 12px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-dim);
+            margin: 0 0 12px;
+        }
+
+        .link-panel {
+            background: var(--panel-2);
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            padding: 14px;
+            margin-bottom: 10px;
+        }
+
+        .link-panel .link-text {
+            font-family: ui-monospace, "SF Mono", Menlo, monospace;
+            font-size: 12px;
+            color: var(--text-dim);
+            word-break: break-all;
+            margin-bottom: 12px;
+            line-height: 1.5;
+        }
+
+        .btn-row {
+            display: flex;
+            gap: 8px;
+        }
+
+        .btn {
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 8px 14px;
+            border-radius: 999px;
+            border: 1px solid transparent;
+            cursor: pointer;
+            transition: opacity 0.15s ease;
+        }
+
+        .btn:hover {
+            opacity: 0.85;
+        }
+
+        .btn-primary {
+            background: var(--accent);
+            color: #fff;
+        }
+
+        .btn-outline {
+            background: transparent;
+            color: var(--text);
+            border-color: var(--border);
+        }
+
+        .apps {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+        }
+
+        .apps .chip {
+            font-size: 12px;
+            padding: 6px 12px;
+            border-radius: 999px;
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+        }
+
+        .footer {
+            text-align: center;
+            font-size: 11px;
+            color: var(--text-faint);
+            margin-top: 24px;
+        }
+
+        .qr-popup {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: var(--panel);
+            border: 1px solid var(--border);
+            padding: 20px;
+            border-radius: 14px;
+            box-shadow: 0 40px 100px -30px var(--accent-edge), 0 20px 40px -20px rgba(0, 0, 0, 0.6);
+            display: none;
+            z-index: 9999;
+        }
+
+        .qr-popup img,
+        .qr-popup canvas {
+            border-radius: 8px;
+        }
+
+        .qr-close {
+            text-align: right;
+            margin-bottom: 8px;
+        }
+
+        .qr-close button {
+            background: transparent;
+            border: none;
+            color: var(--text-dim);
+            font-size: 16px;
+            cursor: pointer;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="wrap">
+        <div class="brand"><span class="dot"></span> INIX VPN</div>
+
+        <div class="card">
+            <div class="row">
+                <div>
+                    <h1>{{ user.username }}</h1>
+                </div>
+                <span
+                    class="badge {% if user.status.value == 'active' %}active{% elif user.status.value == 'limited' %}limited{% elif user.status.value == 'expired' %}expired{% elif user.status.value == 'on_hold' %}on_hold{% else %}disabled{% endif %}">
+                    {{ user.status.value }}
+                </span>
+            </div>
+
+            <div class="meta">
+                <div class="item">
+                    <div class="label">Expires</div>
+                    <div class="value">
+                        {% if not user.expire %}
+                        Never
+                        {% else %}
+                        {% set remaining_days = ((user.expire - now().timestamp()) // (24 * 3600)) | int %}
+                        {{ user.expire | datetime }}{% if remaining_days >= 0 %} ({{ remaining_days }}d left){% endif %}
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="item">
+                    <div class="label">Traffic</div>
+                    <div class="value">
+                        {{ user.used_traffic | bytesformat }} / {% if not user.data_limit %}∞{% else %}{{ user.data_limit | bytesformat }}{% endif %}
+                    </div>
+                    {% if user.data_limit %}
+                    <div class="progress-track">
+                        <div class="progress-fill"
+                            style="width: {{ [(user.used_traffic / user.data_limit * 100) | round(1), 100] | min }}%">
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        {% if user.status.value in ['active', 'on_hold'] and user.links %}
+        <div class="card">
+            <div class="section-title">Connection</div>
+            {% for link in user.links %}
+            <div class="link-panel">
+                <div class="link-text" id="link-{{ loop.index }}">{{ link }}</div>
+                <div class="btn-row">
+                    <button class="btn btn-primary" onclick="copyLink('{{ link }}', this)">Copy</button>
+                    <button class="btn btn-outline qr-button" data-link="{{ link }}">QR Code</button>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="card">
+            <div class="section-title">Apps</div>
+            <div class="apps">
+                <span class="chip">Happ (iOS / Android)</span>
+                <span class="chip">v2rayNG (Android)</span>
+                <span class="chip">Streisand (iOS)</span>
+                <span class="chip">v2rayN (Windows)</span>
+                <span class="chip">V2Box (macOS)</span>
+            </div>
+        </div>
+        {% endif %}
+
+        <div class="footer">INIX VPN &middot; {{ user.username }}</div>
+    </div>
+
+    <div class="qr-popup" id="qrPopup">
+        <div class="qr-close">
+            <button onclick="closeQrPopup()">✕</button>
+        </div>
+        <div id="qrCodeContainer"></div>
+    </div>
+
+    <script>
+        function copyLink(link, button) {
+            const tempInput = document.createElement('input');
+            tempInput.setAttribute('value', link);
+            document.body.appendChild(tempInput);
+            tempInput.select();
+            document.execCommand('copy');
+            document.body.removeChild(tempInput);
+
+            const original = button.textContent;
+            button.textContent = 'Copied!';
+            setTimeout(function () { button.textContent = original; }, 1500);
+        }
+
+        const qrButtons = document.querySelectorAll('.qr-button');
+        const qrPopup = document.getElementById('qrPopup');
+        const qrCodeContainer = document.getElementById('qrCodeContainer');
+
+        qrButtons.forEach((qrButton) => {
+            qrButton.addEventListener('click', () => {
+                const link = qrButton.dataset.link;
+                while (qrCodeContainer.firstChild) {
+                    qrCodeContainer.removeChild(qrCodeContainer.firstChild);
+                }
+                new QRCode(qrCodeContainer, {
+                    text: link,
+                    width: 220,
+                    height: 220,
+                    correctLevel: QRCode.CorrectLevel.L
+                });
+                qrPopup.style.display = 'block';
+            });
+        });
+
+        function closeQrPopup() {
+            qrPopup.style.display = 'none';
+        }
+    </script>
+</body>
+
+</html>
