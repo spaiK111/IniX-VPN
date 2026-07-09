@@ -4,8 +4,8 @@ import socket
 import time
 
 import requests
-from telegram import Update
-from telegram.ext import Application, CommandHandler, ContextTypes
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("vpn-bot")
@@ -20,6 +20,13 @@ VPN_USERNAME = os.environ.get("VPN_USERNAME", "maks")
 
 SERVER_PUBLIC_IP = os.environ["SERVER_PUBLIC_IP"]
 SERVER_PORT = int(os.environ.get("SERVER_PORT", "443"))
+
+MENU_KEYBOARD = InlineKeyboardMarkup([
+    [
+        InlineKeyboardButton("🔗 Link", callback_data="link"),
+        InlineKeyboardButton("📡 Status", callback_data="status"),
+    ]
+])
 
 
 def is_authorized(update: Update) -> bool:
@@ -36,50 +43,31 @@ def get_marzban_token() -> str:
     return resp.json()["access_token"]
 
 
-async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_authorized(update):
-        return
-    await update.message.reply_text(
-        "VPN-Bot bereit.\n\n"
-        "/link - deinen VPN-Link abrufen\n"
-        "/status - Serverstatus pruefen"
+def build_link_text() -> str:
+    token = get_marzban_token()
+    resp = requests.get(
+        f"{MARZBAN_API_URL}/api/user/{VPN_USERNAME}",
+        headers={"Authorization": f"Bearer {token}"},
+        timeout=10,
+    )
+    resp.raise_for_status()
+    data = resp.json()
+    links = data.get("links") or []
+    if not links:
+        return "Kein Link fuer diesen Nutzer gefunden."
+
+    expire = data.get("expire")
+    expire_text = "unbegrenzt" if not expire else time.strftime("%d.%m.%Y", time.localtime(expire))
+    used_mb = (data.get("used_traffic") or 0) / 1024 / 1024
+
+    return (
+        f"Dein VPN-Link:\n{links[0]}\n\n"
+        f"Gueltig bis: {expire_text}\n"
+        f"Verbrauch bisher: {used_mb:.1f} MB"
     )
 
 
-async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_authorized(update):
-        return
-    try:
-        token = get_marzban_token()
-        resp = requests.get(
-            f"{MARZBAN_API_URL}/api/user/{VPN_USERNAME}",
-            headers={"Authorization": f"Bearer {token}"},
-            timeout=10,
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        links = data.get("links") or []
-        if not links:
-            await update.message.reply_text("Kein Link fuer diesen Nutzer gefunden.")
-            return
-
-        expire = data.get("expire")
-        expire_text = "unbegrenzt" if not expire else time.strftime("%d.%m.%Y", time.localtime(expire))
-        used_mb = (data.get("used_traffic") or 0) / 1024 / 1024
-
-        await update.message.reply_text(
-            f"Dein VPN-Link:\n{links[0]}\n\n"
-            f"Gueltig bis: {expire_text}\n"
-            f"Verbrauch bisher: {used_mb:.1f} MB"
-        )
-    except Exception as e:
-        log.exception("link command failed")
-        await update.message.reply_text(f"Fehler beim Abrufen: {e}")
-
-
-async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_authorized(update):
-        return
+def build_status_text() -> str:
     lines = []
 
     try:
@@ -97,7 +85,51 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         lines.append(f"VPN-Port {SERVER_PORT}: NICHT erreichbar")
 
-    await update.message.reply_text("\n".join(lines))
+    return "\n".join(lines)
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_authorized(update):
+        return
+    await update.message.reply_text("Hey, what do you want to know?", reply_markup=MENU_KEYBOARD)
+
+
+async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_authorized(update):
+        return
+    try:
+        text = build_link_text()
+    except Exception as e:
+        log.exception("link command failed")
+        text = f"Fehler beim Abrufen: {e}"
+    await update.message.reply_text(text, reply_markup=MENU_KEYBOARD)
+
+
+async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_authorized(update):
+        return
+    await update.message.reply_text(build_status_text(), reply_markup=MENU_KEYBOARD)
+
+
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if not is_authorized(update):
+        await query.answer()
+        return
+
+    await query.answer()
+    try:
+        if query.data == "link":
+            text = build_link_text()
+        elif query.data == "status":
+            text = build_status_text()
+        else:
+            return
+    except Exception as e:
+        log.exception("button callback failed")
+        text = f"Fehler beim Abrufen: {e}"
+
+    await query.message.reply_text(text, reply_markup=MENU_KEYBOARD)
 
 
 def main():
@@ -105,6 +137,7 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("link", link))
     app.add_handler(CommandHandler("status", status))
+    app.add_handler(CallbackQueryHandler(button))
     log.info("Bot starting (polling)...")
     app.run_polling()
 
