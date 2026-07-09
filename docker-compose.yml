@@ -12,3 +12,5 @@ services:
     restart: always
     env_file: bot.env
     network_mode: host
+    volumes:
+      - /var/lib/marzban-bot:/data

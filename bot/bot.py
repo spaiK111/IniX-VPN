@@ -7,7 +7,15 @@ import time
 
 import requests
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
-from telegram.ext import Application, CallbackQueryHandler, CommandHandler, ContextTypes
+from telegram.ext import (
+    Application,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+    PicklePersistence,
+)
+
+from i18n import DEFAULT_LANG, TRANSLATIONS, status_label, t
 
 logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("vpn-bot")
@@ -21,22 +29,40 @@ MARZBAN_ADMIN_PASSWORD = os.environ["MARZBAN_ADMIN_PASSWORD"]
 SERVER_PUBLIC_IP = os.environ["SERVER_PUBLIC_IP"]
 SERVER_PORT = int(os.environ.get("SERVER_PORT", "443"))
 
-NO_LINK_TEXT = "You currently dont have a vpn link"
+PERSISTENCE_PATH = os.environ.get("PERSISTENCE_PATH", "/data/bot_persistence.pkl")
 
-HOME_KEYBOARD = InlineKeyboardMarkup([
-    [
-        InlineKeyboardButton("ℹ️ Info", callback_data="link"),
-        InlineKeyboardButton("📡 Status", callback_data="status"),
-    ]
-])
+LANGUAGE_LABELS = {"ru": "🇷🇺 Русский", "de": "🇩🇪 Deutsch", "en": "🇬🇧 English"}
 
-RESULT_KEYBOARD = InlineKeyboardMarkup([
-    [
-        InlineKeyboardButton("ℹ️ Info", callback_data="link"),
-        InlineKeyboardButton("📡 Status", callback_data="status"),
-    ],
-    [InlineKeyboardButton("🏠 Home", callback_data="home")],
-])
+
+def get_lang(context: ContextTypes.DEFAULT_TYPE) -> str:
+    return context.user_data.get("lang", DEFAULT_LANG)
+
+
+def home_keyboard(lang: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(t(lang, "btn_info"), callback_data="link"),
+            InlineKeyboardButton(t(lang, "btn_status"), callback_data="status"),
+        ],
+        [InlineKeyboardButton(t(lang, "btn_language"), callback_data="language")],
+    ])
+
+
+def result_keyboard(lang: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton(t(lang, "btn_info"), callback_data="link"),
+            InlineKeyboardButton(t(lang, "btn_status"), callback_data="status"),
+        ],
+        [InlineKeyboardButton(t(lang, "btn_home"), callback_data="home")],
+    ])
+
+
+def language_keyboard(lang: str) -> InlineKeyboardMarkup:
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(label, callback_data=f"lang_{code}") for code, label in LANGUAGE_LABELS.items()],
+        [InlineKeyboardButton(t(lang, "btn_home"), callback_data="home")],
+    ])
 
 
 def get_marzban_token() -> str:
@@ -119,118 +145,144 @@ def get_or_create_user(telegram_id: int) -> tuple[dict, bool]:
     return create_disabled_user_for_telegram(telegram_id, token), True
 
 
-def build_home_text(user: dict, telegram_id: int, just_created: bool) -> str:
-    text = f"Telegram-ID: {telegram_id}\nStatus: {user.get('status', 'unknown').capitalize()}"
+def build_home_text(lang: str, user: dict, telegram_id: int, just_created: bool) -> str:
+    text = (
+        f"{t(lang, 'telegram_id')}: {telegram_id}\n"
+        f"{t(lang, 'status')}: {status_label(lang, user.get('status', 'unknown'))}"
+    )
     if just_created:
-        text += (
-            "\n\nDein Account wurde angelegt, ist aber noch nicht freigeschaltet. "
-            "Melde dich beim Admin."
-        )
+        text += f"\n\n{t(lang, 'pending_activation')}"
     return text
 
 
-def build_link_text(user: dict, telegram_id: int) -> str:
+def build_link_text(lang: str, user: dict, telegram_id: int) -> str:
     links = user.get("links") or []
     if not links:
-        return f"Telegram-ID: {telegram_id}\n\n{NO_LINK_TEXT}"
+        return f"{t(lang, 'telegram_id')}: {telegram_id}\n\n{t(lang, 'no_link')}"
 
     expire = user.get("expire")
-    expire_text = "unbegrenzt" if not expire else time.strftime("%d.%m.%Y", time.localtime(expire))
+    expire_text = t(lang, "unlimited") if not expire else time.strftime("%d.%m.%Y", time.localtime(expire))
     used_mb = (user.get("used_traffic") or 0) / 1024 / 1024
 
     # <code> makes the link monospace and tap-to-copy in Telegram's mobile apps.
     return (
-        f"Telegram-ID: {telegram_id}\n"
-        f"Status: {user.get('status', 'unknown').capitalize()}\n\n"
-        f"Dein VPN-Link (antippen zum Kopieren):\n<code>{html.escape(links[0])}</code>\n\n"
-        f"Gueltig bis: {expire_text}\n"
-        f"Verbrauch bisher: {used_mb:.1f} MB"
+        f"{t(lang, 'telegram_id')}: {telegram_id}\n"
+        f"{t(lang, 'status')}: {status_label(lang, user.get('status', 'unknown'))}\n\n"
+        f"{t(lang, 'link_header')}\n<code>{html.escape(links[0])}</code>\n\n"
+        f"{t(lang, 'valid_until')}: {expire_text}\n"
+        f"{t(lang, 'usage_so_far')}: {used_mb:.1f} MB"
     )
 
 
-def build_status_text(user: dict) -> str:
-    lines = [f"Status: {user.get('status', 'unknown').capitalize()}"]
+def build_status_text(lang: str, user: dict) -> str:
+    lines = [f"{t(lang, 'status')}: {status_label(lang, user.get('status', 'unknown'))}"]
 
     try:
         get_marzban_token()
-        lines.append("Marzban-Panel: erreichbar")
+        lines.append(t(lang, "panel_reachable"))
     except Exception:
-        lines.append("Marzban-Panel: NICHT erreichbar")
+        lines.append(t(lang, "panel_unreachable"))
 
     try:
         start_t = time.monotonic()
         with socket.create_connection((SERVER_PUBLIC_IP, SERVER_PORT), timeout=5):
             pass
         latency_ms = (time.monotonic() - start_t) * 1000
-        lines.append(f"VPN-Port {SERVER_PORT}: erreichbar ({latency_ms:.0f} ms Antwortzeit)")
+        lines.append(t(lang, "port_reachable", port=SERVER_PORT, ms=latency_ms))
     except Exception:
-        lines.append(f"VPN-Port {SERVER_PORT}: NICHT erreichbar")
+        lines.append(t(lang, "port_unreachable", port=SERVER_PORT))
 
     return "\n".join(lines)
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    lang = get_lang(context)
     telegram_id = update.effective_user.id
     try:
         user, just_created = get_or_create_user(telegram_id)
-        text = build_home_text(user, telegram_id, just_created)
+        text = build_home_text(lang, user, telegram_id, just_created)
     except Exception as e:
         log.exception("start command failed")
-        text = f"Fehler: {html.escape(str(e))}"
-    await update.message.reply_text(text, reply_markup=HOME_KEYBOARD, parse_mode="HTML")
+        text = f"{t(lang, 'error')}: {html.escape(str(e))}"
+    await update.message.reply_text(text, reply_markup=home_keyboard(lang), parse_mode="HTML")
 
 
 async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    lang = get_lang(context)
     telegram_id = update.effective_user.id
     try:
         user = find_user_by_telegram_id(telegram_id)
-        text = build_link_text(user, telegram_id) if user else f"Telegram-ID: {telegram_id}\n\n{NO_LINK_TEXT}"
+        text = (
+            build_link_text(lang, user, telegram_id)
+            if user
+            else f"{t(lang, 'telegram_id')}: {telegram_id}\n\n{t(lang, 'no_link')}"
+        )
     except Exception as e:
         log.exception("link command failed")
-        text = f"Fehler beim Abrufen: {html.escape(str(e))}"
-    await update.message.reply_text(text, reply_markup=RESULT_KEYBOARD, parse_mode="HTML")
+        text = f"{t(lang, 'error_fetching')}: {html.escape(str(e))}"
+    await update.message.reply_text(text, reply_markup=result_keyboard(lang), parse_mode="HTML")
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    lang = get_lang(context)
     telegram_id = update.effective_user.id
     try:
         user = find_user_by_telegram_id(telegram_id)
-        text = build_status_text(user) if user else NO_LINK_TEXT
+        text = build_status_text(lang, user) if user else t(lang, "no_link")
     except Exception as e:
         log.exception("status command failed")
-        text = f"Fehler beim Abrufen: {html.escape(str(e))}"
-    await update.message.reply_text(text, reply_markup=RESULT_KEYBOARD, parse_mode="HTML")
+        text = f"{t(lang, 'error_fetching')}: {html.escape(str(e))}"
+    await update.message.reply_text(text, reply_markup=result_keyboard(lang), parse_mode="HTML")
 
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
+    lang = get_lang(context)
     telegram_id = update.effective_user.id
 
     try:
         if query.data == "home":
             user, just_created = get_or_create_user(telegram_id)
-            text = build_home_text(user, telegram_id, just_created)
-            keyboard = HOME_KEYBOARD
+            text = build_home_text(lang, user, telegram_id, just_created)
+            keyboard = home_keyboard(lang)
+
+        elif query.data == "language":
+            text = t(lang, "choose_language")
+            keyboard = language_keyboard(lang)
+
+        elif query.data.startswith("lang_"):
+            new_lang = query.data.removeprefix("lang_")
+            if new_lang not in TRANSLATIONS:
+                return
+            context.user_data["lang"] = new_lang
+            text = t(new_lang, "language_set")
+            keyboard = home_keyboard(new_lang)
+
         else:
             user = find_user_by_telegram_id(telegram_id)
-            keyboard = RESULT_KEYBOARD
+            keyboard = result_keyboard(lang)
             if query.data == "link":
-                text = build_link_text(user, telegram_id) if user else f"Telegram-ID: {telegram_id}\n\n{NO_LINK_TEXT}"
+                text = (
+                    build_link_text(lang, user, telegram_id)
+                    if user
+                    else f"{t(lang, 'telegram_id')}: {telegram_id}\n\n{t(lang, 'no_link')}"
+                )
             elif query.data == "status":
-                text = build_status_text(user) if user else NO_LINK_TEXT
+                text = build_status_text(lang, user) if user else t(lang, "no_link")
             else:
                 return
     except Exception as e:
         log.exception("button callback failed")
-        text = f"Fehler beim Abrufen: {html.escape(str(e))}"
-        keyboard = RESULT_KEYBOARD
+        text = f"{t(lang, 'error_fetching')}: {html.escape(str(e))}"
+        keyboard = result_keyboard(lang)
 
     await query.message.reply_text(text, reply_markup=keyboard, parse_mode="HTML")
 
 
 def main():
-    app = Application.builder().token(BOT_TOKEN).build()
+    persistence = PicklePersistence(filepath=PERSISTENCE_PATH)
+    app = Application.builder().token(BOT_TOKEN).persistence(persistence).build()
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("link", link))
     app.add_handler(CommandHandler("status", status))
