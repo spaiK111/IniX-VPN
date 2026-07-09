@@ -12,15 +12,15 @@ logging.basicConfig(level=logging.INFO)
 log = logging.getLogger("vpn-bot")
 
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
-ALLOWED_USER_ID = int(os.environ["TELEGRAM_ALLOWED_USER_ID"])
 
 MARZBAN_API_URL = os.environ.get("MARZBAN_API_URL", "http://127.0.0.1:8000")
 MARZBAN_ADMIN_USERNAME = os.environ["MARZBAN_ADMIN_USERNAME"]
 MARZBAN_ADMIN_PASSWORD = os.environ["MARZBAN_ADMIN_PASSWORD"]
-VPN_USERNAME = os.environ.get("VPN_USERNAME", "maks")
 
 SERVER_PUBLIC_IP = os.environ["SERVER_PUBLIC_IP"]
 SERVER_PORT = int(os.environ.get("SERVER_PORT", "443"))
+
+NO_LINK_TEXT = "You currently dont have a vpn link"
 
 MENU_KEYBOARD = InlineKeyboardMarkup([
     [
@@ -28,10 +28,6 @@ MENU_KEYBOARD = InlineKeyboardMarkup([
         InlineKeyboardButton("📡 Status", callback_data="status"),
     ]
 ])
-
-
-def is_authorized(update: Update) -> bool:
-    return update.effective_user is not None and update.effective_user.id == ALLOWED_USER_ID
 
 
 def get_marzban_token() -> str:
@@ -44,18 +40,28 @@ def get_marzban_token() -> str:
     return resp.json()["access_token"]
 
 
-def build_link_text() -> str:
+def get_marzban_user(username: str) -> dict | None:
+    """Looks up a Marzban user by username. Returns None if it doesn't exist."""
     token = get_marzban_token()
     resp = requests.get(
-        f"{MARZBAN_API_URL}/api/user/{VPN_USERNAME}",
+        f"{MARZBAN_API_URL}/api/user/{username}",
         headers={"Authorization": f"Bearer {token}"},
         timeout=10,
     )
+    if resp.status_code == 404:
+        return None
     resp.raise_for_status()
-    data = resp.json()
+    return resp.json()
+
+
+def build_link_text(telegram_id: int) -> str:
+    data = get_marzban_user(str(telegram_id))
+    if data is None:
+        return NO_LINK_TEXT
+
     links = data.get("links") or []
     if not links:
-        return "Kein Link fuer diesen Nutzer gefunden."
+        return NO_LINK_TEXT
 
     expire = data.get("expire")
     expire_text = "unbegrenzt" if not expire else time.strftime("%d.%m.%Y", time.localtime(expire))
@@ -69,7 +75,10 @@ def build_link_text() -> str:
     )
 
 
-def build_status_text() -> str:
+def build_status_text(telegram_id: int) -> str:
+    if get_marzban_user(str(telegram_id)) is None:
+        return NO_LINK_TEXT
+
     lines = []
 
     try:
@@ -91,16 +100,12 @@ def build_status_text() -> str:
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_authorized(update):
-        return
     await update.message.reply_text("Hey, what do you want to know?", reply_markup=MENU_KEYBOARD)
 
 
 async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_authorized(update):
-        return
     try:
-        text = build_link_text()
+        text = build_link_text(update.effective_user.id)
     except Exception as e:
         log.exception("link command failed")
         text = f"Fehler beim Abrufen: {html.escape(str(e))}"
@@ -108,23 +113,23 @@ async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if not is_authorized(update):
-        return
-    await update.message.reply_text(build_status_text(), reply_markup=MENU_KEYBOARD)
+    try:
+        text = build_status_text(update.effective_user.id)
+    except Exception as e:
+        log.exception("status command failed")
+        text = f"Fehler beim Abrufen: {html.escape(str(e))}"
+    await update.message.reply_text(text, reply_markup=MENU_KEYBOARD, parse_mode="HTML")
 
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    if not is_authorized(update):
-        await query.answer()
-        return
-
     await query.answer()
+
     try:
         if query.data == "link":
-            text = build_link_text()
+            text = build_link_text(update.effective_user.id)
         elif query.data == "status":
-            text = build_status_text()
+            text = build_status_text(update.effective_user.id)
         else:
             return
     except Exception as e:
