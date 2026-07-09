@@ -24,7 +24,7 @@ NO_LINK_TEXT = "You currently dont have a vpn link"
 
 MENU_KEYBOARD = InlineKeyboardMarkup([
     [
-        InlineKeyboardButton("🔗 Link", callback_data="link"),
+        InlineKeyboardButton("ℹ️ Info", callback_data="link"),
         InlineKeyboardButton("📡 Status", callback_data="status"),
     ]
 ])
@@ -57,11 +57,11 @@ def get_marzban_user(username: str) -> dict | None:
 def build_link_text(telegram_id: int) -> str:
     data = get_marzban_user(str(telegram_id))
     if data is None:
-        return NO_LINK_TEXT
+        return f"Telegram-ID: {telegram_id}\n\n{NO_LINK_TEXT}"
 
     links = data.get("links") or []
     if not links:
-        return NO_LINK_TEXT
+        return f"Telegram-ID: {telegram_id}\n\n{NO_LINK_TEXT}"
 
     expire = data.get("expire")
     expire_text = "unbegrenzt" if not expire else time.strftime("%d.%m.%Y", time.localtime(expire))
@@ -69,6 +69,7 @@ def build_link_text(telegram_id: int) -> str:
 
     # <code> makes the link monospace and tap-to-copy in Telegram's mobile apps.
     return (
+        f"Telegram-ID: {telegram_id}\n\n"
         f"Dein VPN-Link (antippen zum Kopieren):\n<code>{html.escape(links[0])}</code>\n\n"
         f"Gueltig bis: {expire_text}\n"
         f"Verbrauch bisher: {used_mb:.1f} MB"
