@@ -23,11 +23,19 @@ SERVER_PORT = int(os.environ.get("SERVER_PORT", "443"))
 
 NO_LINK_TEXT = "You currently dont have a vpn link"
 
-MENU_KEYBOARD = InlineKeyboardMarkup([
+HOME_KEYBOARD = InlineKeyboardMarkup([
     [
         InlineKeyboardButton("ℹ️ Info", callback_data="link"),
         InlineKeyboardButton("📡 Status", callback_data="status"),
     ]
+])
+
+RESULT_KEYBOARD = InlineKeyboardMarkup([
+    [
+        InlineKeyboardButton("ℹ️ Info", callback_data="link"),
+        InlineKeyboardButton("📡 Status", callback_data="status"),
+    ],
+    [InlineKeyboardButton("🏠 Home", callback_data="home")],
 ])
 
 
@@ -39,20 +47,6 @@ def get_marzban_token() -> str:
     )
     resp.raise_for_status()
     return resp.json()["access_token"]
-
-
-def get_marzban_user(username: str, token: str | None = None) -> dict | None:
-    """Looks up a Marzban user by username. Returns None if it doesn't exist."""
-    token = token or get_marzban_token()
-    resp = requests.get(
-        f"{MARZBAN_API_URL}/api/user/{username}",
-        headers={"Authorization": f"Bearer {token}"},
-        timeout=10,
-    )
-    if resp.status_code == 404:
-        return None
-    resp.raise_for_status()
-    return resp.json()
 
 
 def find_user_by_telegram_id(telegram_id: int, token: str | None = None) -> dict | None:
@@ -116,6 +110,25 @@ def create_disabled_user_for_telegram(telegram_id: int, token: str | None = None
     return disable_resp.json()
 
 
+def get_or_create_user(telegram_id: int) -> tuple[dict, bool]:
+    """Returns (user, was_just_created)."""
+    token = get_marzban_token()
+    user = find_user_by_telegram_id(telegram_id, token)
+    if user is not None:
+        return user, False
+    return create_disabled_user_for_telegram(telegram_id, token), True
+
+
+def build_home_text(user: dict, telegram_id: int, just_created: bool) -> str:
+    text = f"Telegram-ID: {telegram_id}\nStatus: {user.get('status', 'unknown').capitalize()}"
+    if just_created:
+        text += (
+            "\n\nDein Account wurde angelegt, ist aber noch nicht freigeschaltet. "
+            "Melde dich beim Admin."
+        )
+    return text
+
+
 def build_link_text(user: dict, telegram_id: int) -> str:
     links = user.get("links") or []
     if not links:
@@ -159,26 +172,12 @@ def build_status_text(user: dict) -> str:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.effective_user.id
     try:
-        token = get_marzban_token()
-        user = find_user_by_telegram_id(telegram_id, token)
-        if user is None:
-            user = create_disabled_user_for_telegram(telegram_id, token)
-            text = (
-                f"Telegram-ID: {telegram_id}\n"
-                f"Status: {user.get('status', 'unknown').capitalize()}\n\n"
-                "Dein Account wurde angelegt, ist aber noch nicht freigeschaltet. "
-                "Melde dich beim Admin."
-            )
-        else:
-            text = (
-                f"Telegram-ID: {telegram_id}\n"
-                f"Status: {user.get('status', 'unknown').capitalize()}"
-            )
+        user, just_created = get_or_create_user(telegram_id)
+        text = build_home_text(user, telegram_id, just_created)
     except Exception as e:
         log.exception("start command failed")
         text = f"Fehler: {html.escape(str(e))}"
-
-    await update.message.reply_text(text, reply_markup=MENU_KEYBOARD, parse_mode="HTML")
+    await update.message.reply_text(text, reply_markup=HOME_KEYBOARD, parse_mode="HTML")
 
 
 async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -189,7 +188,7 @@ async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         log.exception("link command failed")
         text = f"Fehler beim Abrufen: {html.escape(str(e))}"
-    await update.message.reply_text(text, reply_markup=MENU_KEYBOARD, parse_mode="HTML")
+    await update.message.reply_text(text, reply_markup=RESULT_KEYBOARD, parse_mode="HTML")
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -200,7 +199,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         log.exception("status command failed")
         text = f"Fehler beim Abrufen: {html.escape(str(e))}"
-    await update.message.reply_text(text, reply_markup=MENU_KEYBOARD, parse_mode="HTML")
+    await update.message.reply_text(text, reply_markup=RESULT_KEYBOARD, parse_mode="HTML")
 
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -209,18 +208,25 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
     telegram_id = update.effective_user.id
 
     try:
-        user = find_user_by_telegram_id(telegram_id)
-        if query.data == "link":
-            text = build_link_text(user, telegram_id) if user else f"Telegram-ID: {telegram_id}\n\n{NO_LINK_TEXT}"
-        elif query.data == "status":
-            text = build_status_text(user) if user else NO_LINK_TEXT
+        if query.data == "home":
+            user, just_created = get_or_create_user(telegram_id)
+            text = build_home_text(user, telegram_id, just_created)
+            keyboard = HOME_KEYBOARD
         else:
-            return
+            user = find_user_by_telegram_id(telegram_id)
+            keyboard = RESULT_KEYBOARD
+            if query.data == "link":
+                text = build_link_text(user, telegram_id) if user else f"Telegram-ID: {telegram_id}\n\n{NO_LINK_TEXT}"
+            elif query.data == "status":
+                text = build_status_text(user) if user else NO_LINK_TEXT
+            else:
+                return
     except Exception as e:
         log.exception("button callback failed")
         text = f"Fehler beim Abrufen: {html.escape(str(e))}"
+        keyboard = RESULT_KEYBOARD
 
-    await query.message.reply_text(text, reply_markup=MENU_KEYBOARD, parse_mode="HTML")
+    await query.message.reply_text(text, reply_markup=keyboard, parse_mode="HTML")
 
 
 def main():
