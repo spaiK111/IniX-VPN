@@ -6,3 +6,9 @@ services:
     network_mode: host
     volumes:
       - /var/lib/marzban:/var/lib/marzban
+
+  telegram-bot:
+    image: ghcr.io/spaik111/vpn-service-bot:latest
+    restart: always
+    env_file: bot.env
+    network_mode: host
