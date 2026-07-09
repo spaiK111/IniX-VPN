@@ -1,3 +1,4 @@
+import html
 import logging
 import os
 import socket
@@ -60,8 +61,9 @@ def build_link_text() -> str:
     expire_text = "unbegrenzt" if not expire else time.strftime("%d.%m.%Y", time.localtime(expire))
     used_mb = (data.get("used_traffic") or 0) / 1024 / 1024
 
+    # <code> makes the link monospace and tap-to-copy in Telegram's mobile apps.
     return (
-        f"Dein VPN-Link:\n{links[0]}\n\n"
+        f"Dein VPN-Link (antippen zum Kopieren):\n<code>{html.escape(links[0])}</code>\n\n"
         f"Gueltig bis: {expire_text}\n"
         f"Verbrauch bisher: {used_mb:.1f} MB"
     )
@@ -101,8 +103,8 @@ async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         text = build_link_text()
     except Exception as e:
         log.exception("link command failed")
-        text = f"Fehler beim Abrufen: {e}"
-    await update.message.reply_text(text, reply_markup=MENU_KEYBOARD)
+        text = f"Fehler beim Abrufen: {html.escape(str(e))}"
+    await update.message.reply_text(text, reply_markup=MENU_KEYBOARD, parse_mode="HTML")
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -127,9 +129,9 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
     except Exception as e:
         log.exception("button callback failed")
-        text = f"Fehler beim Abrufen: {e}"
+        text = f"Fehler beim Abrufen: {html.escape(str(e))}"
 
-    await query.message.reply_text(text, reply_markup=MENU_KEYBOARD)
+    await query.message.reply_text(text, reply_markup=MENU_KEYBOARD, parse_mode="HTML")
 
 
 def main():
