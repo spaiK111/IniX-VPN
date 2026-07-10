@@ -254,7 +254,9 @@ h1 {
 }
 
 .apps .chip {
+    font-family: inherit;
     font-size: 12px;
+    font-weight: 600;
     padding: 6px 12px;
     border-radius: 999px;
     background: rgba(255, 255, 255, 0.03);
@@ -262,11 +264,24 @@ h1 {
     color: var(--text-dim);
     text-decoration: none;
     cursor: pointer;
+    transition: all 0.15s ease;
 }
 
 .apps .chip:hover {
     border-color: var(--accent-edge);
     color: var(--accent-light);
+}
+
+.apps .app-tab.active {
+    background: var(--accent-soft);
+    border-color: var(--accent-edge);
+    color: var(--accent-light);
+}
+
+#installDownloadBtn {
+    margin-top: 14px;
+    display: inline-block;
+    text-decoration: none;
 }
 
 .platform-select {

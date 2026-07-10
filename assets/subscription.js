@@ -74,98 +74,120 @@ function initProgressBars() {
     });
 }
 
+// Generic fallback steps for platforms that don't (yet) have per-app
+// instructions - every app on that platform shares this same text.
+const GENERIC_DESKTOP_STEPS = [
+    "Download and install one of the apps below.",
+    "Open the app and find its subscription/profile settings.",
+    "Add a new subscription using your link from above (or import from clipboard).",
+    "Select the server in the list and connect."
+];
+
 const INSTALL_GUIDES = {
     android: {
-        steps: [
-            "Install one of the apps below on your device.",
-            'Open the app and tap "+" to add a new profile.',
-            'Copy your link above, then choose "Import from Clipboard" (or paste it manually).',
-            "Select the server in the list and tap Connect."
-        ],
         apps: [
-            { name: "Happ", url: "https://play.google.com/store/search?q=happ+proxy&c=apps" },
-            { name: "v2RayTun", url: "https://play.google.com/store/search?q=v2raytun&c=apps" },
-            { name: "FlClashX", url: "https://play.google.com/store/search?q=flclash&c=apps" }
+            {
+                name: "Happ",
+                url: "https://play.google.com/store/search?q=happ+proxy&c=apps",
+                steps: [
+                    "Install Happ using the button below.",
+                    'Open Happ and tap the "+" button in the top right.',
+                    'Copy your link above, then tap "Add from clipboard".',
+                    "Tap the server that appears and press the big Connect button."
+                ]
+            },
+            {
+                name: "v2RayTun",
+                url: "https://play.google.com/store/search?q=v2raytun&c=apps",
+                steps: [
+                    "Install v2RayTun using the button below.",
+                    'Open the app and tap the "+" icon.',
+                    'Copy your link above, then choose "Import from clipboard".',
+                    "Select the server and tap the Connect button."
+                ]
+            },
+            {
+                name: "FlClashX",
+                url: "https://play.google.com/store/search?q=flclash&c=apps",
+                steps: [
+                    "Install FlClash using the button below.",
+                    'Open the app, go to "Profiles" and tap "+".',
+                    "Copy your link above, then choose \"Import from clipboard\" (or paste the URL directly).",
+                    "Select the profile and toggle the connection switch."
+                ]
+            }
         ]
     },
     ios: {
-        steps: [
-            "Install one of the apps below from the App Store.",
-            'Open the app and tap "+" to add a new configuration.',
-            "Paste your subscription link from above, or scan the QR code.",
-            "Select the server and tap Connect."
-        ],
         apps: [
-            { name: "Happ", url: "https://apps.apple.com/search?term=happ%20proxy" },
-            { name: "v2RayTun", url: "https://apps.apple.com/search?term=v2raytun" },
-            { name: "FlClashX", url: "https://apps.apple.com/search?term=flclash" },
-            { name: "Clash Mi", url: "https://apps.apple.com/search?term=clash%20mi" },
-            { name: "Shadowrocket", url: "https://apps.apple.com/search?term=shadowrocket" }
+            { name: "Happ", url: "https://apps.apple.com/search?term=happ%20proxy", steps: GENERIC_DESKTOP_STEPS },
+            { name: "v2RayTun", url: "https://apps.apple.com/search?term=v2raytun", steps: GENERIC_DESKTOP_STEPS },
+            { name: "FlClashX", url: "https://apps.apple.com/search?term=flclash", steps: GENERIC_DESKTOP_STEPS },
+            { name: "Clash Mi", url: "https://apps.apple.com/search?term=clash%20mi", steps: GENERIC_DESKTOP_STEPS },
+            { name: "Shadowrocket", url: "https://apps.apple.com/search?term=shadowrocket", steps: GENERIC_DESKTOP_STEPS }
         ]
     },
     windows: {
-        steps: [
-            "Download and install one of the apps below.",
-            "Open the app and find its subscription/profile settings.",
-            "Add a new subscription using your link from above (or import from clipboard).",
-            "Select the server in the list and connect."
-        ],
         apps: [
-            { name: "v2rayN", url: "https://github.com/2dust/v2rayN/releases" },
-            { name: "NekoRay", url: "https://github.com/MatsuriDayo/nekoray/releases" },
-            { name: "Clash Verge Rev", url: "https://github.com/clash-verge-rev/clash-verge-rev/releases" }
+            { name: "v2rayN", url: "https://github.com/2dust/v2rayN/releases", steps: GENERIC_DESKTOP_STEPS },
+            { name: "NekoRay", url: "https://github.com/MatsuriDayo/nekoray/releases", steps: GENERIC_DESKTOP_STEPS },
+            { name: "Clash Verge Rev", url: "https://github.com/clash-verge-rev/clash-verge-rev/releases", steps: GENERIC_DESKTOP_STEPS }
         ]
     },
     macos: {
-        steps: [
-            "Download and install one of the apps below.",
-            "Open the app and find its subscription/profile settings.",
-            "Add a new subscription using your link from above (or import from clipboard).",
-            "Select the server in the list and connect."
-        ],
         apps: [
-            { name: "V2Box", url: "https://apps.apple.com/search?term=v2box" },
-            { name: "NekoRay", url: "https://github.com/MatsuriDayo/nekoray/releases" },
-            { name: "Clash Verge Rev", url: "https://github.com/clash-verge-rev/clash-verge-rev/releases" }
+            { name: "V2Box", url: "https://apps.apple.com/search?term=v2box", steps: GENERIC_DESKTOP_STEPS },
+            { name: "NekoRay", url: "https://github.com/MatsuriDayo/nekoray/releases", steps: GENERIC_DESKTOP_STEPS },
+            { name: "Clash Verge Rev", url: "https://github.com/clash-verge-rev/clash-verge-rev/releases", steps: GENERIC_DESKTOP_STEPS }
         ]
     },
     linux: {
-        steps: [
-            "Download one of the apps below (AppImage or archive, depending on your distro).",
-            "Open the app and find its subscription/profile settings.",
-            "Add a new subscription using your link from above (or import from clipboard).",
-            "Select the server in the list and connect."
-        ],
         apps: [
-            { name: "NekoRay", url: "https://github.com/MatsuriDayo/nekoray/releases" },
-            { name: "Clash Verge Rev", url: "https://github.com/clash-verge-rev/clash-verge-rev/releases" }
+            { name: "NekoRay", url: "https://github.com/MatsuriDayo/nekoray/releases", steps: GENERIC_DESKTOP_STEPS },
+            { name: "Clash Verge Rev", url: "https://github.com/clash-verge-rev/clash-verge-rev/releases", steps: GENERIC_DESKTOP_STEPS }
         ]
     }
 };
 
-function renderInstallGuide(platform) {
-    const guide = INSTALL_GUIDES[platform];
+function renderInstallSteps(app) {
     const stepsEl = document.getElementById("installSteps");
-    const appsEl = document.getElementById("installApps");
-    if (!guide || !stepsEl || !appsEl) return;
+    const downloadBtn = document.getElementById("installDownloadBtn");
+    if (!stepsEl) return;
 
     stepsEl.innerHTML = "";
-    guide.steps.forEach((step) => {
+    app.steps.forEach((step) => {
         const li = document.createElement("li");
         li.textContent = step;
         stepsEl.appendChild(li);
     });
 
+    if (downloadBtn) {
+        downloadBtn.href = app.url;
+        downloadBtn.textContent = "Get " + app.name + " ↗";
+        downloadBtn.style.display = "inline-block";
+    }
+}
+
+function renderInstallGuide(platform) {
+    const guide = INSTALL_GUIDES[platform];
+    const appsEl = document.getElementById("installApps");
+    if (!guide || !appsEl) return;
+
     appsEl.innerHTML = "";
-    guide.apps.forEach((app) => {
-        const a = document.createElement("a");
-        a.className = "chip";
-        a.href = app.url;
-        a.target = "_blank";
-        a.rel = "noopener noreferrer";
-        a.textContent = app.name;
-        appsEl.appendChild(a);
+    guide.apps.forEach((app, index) => {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "chip app-tab" + (index === 0 ? " active" : "");
+        button.textContent = app.name;
+        button.addEventListener("click", () => {
+            appsEl.querySelectorAll(".app-tab").forEach((el) => el.classList.remove("active"));
+            button.classList.add("active");
+            renderInstallSteps(app);
+        });
+        appsEl.appendChild(button);
     });
+
+    renderInstallSteps(guide.apps[0]);
 }
 
 function initInstallGuide() {
