@@ -102,6 +102,44 @@ const INSTALL_GUIDES = {
             { name: "Clash Mi", url: "https://apps.apple.com/search?term=clash%20mi" },
             { name: "Shadowrocket", url: "https://apps.apple.com/search?term=shadowrocket" }
         ]
+    },
+    windows: {
+        steps: [
+            "Download and install one of the apps below.",
+            "Open the app and find its subscription/profile settings.",
+            "Add a new subscription using your link from above (or import from clipboard).",
+            "Select the server in the list and connect."
+        ],
+        apps: [
+            { name: "v2rayN", url: "https://github.com/2dust/v2rayN/releases" },
+            { name: "NekoRay", url: "https://github.com/MatsuriDayo/nekoray/releases" },
+            { name: "Clash Verge Rev", url: "https://github.com/clash-verge-rev/clash-verge-rev/releases" }
+        ]
+    },
+    macos: {
+        steps: [
+            "Download and install one of the apps below.",
+            "Open the app and find its subscription/profile settings.",
+            "Add a new subscription using your link from above (or import from clipboard).",
+            "Select the server in the list and connect."
+        ],
+        apps: [
+            { name: "V2Box", url: "https://apps.apple.com/search?term=v2box" },
+            { name: "NekoRay", url: "https://github.com/MatsuriDayo/nekoray/releases" },
+            { name: "Clash Verge Rev", url: "https://github.com/clash-verge-rev/clash-verge-rev/releases" }
+        ]
+    },
+    linux: {
+        steps: [
+            "Download one of the apps below (AppImage or archive, depending on your distro).",
+            "Open the app and find its subscription/profile settings.",
+            "Add a new subscription using your link from above (or import from clipboard).",
+            "Select the server in the list and connect."
+        ],
+        apps: [
+            { name: "NekoRay", url: "https://github.com/MatsuriDayo/nekoray/releases" },
+            { name: "Clash Verge Rev", url: "https://github.com/clash-verge-rev/clash-verge-rev/releases" }
+        ]
     }
 };
 
