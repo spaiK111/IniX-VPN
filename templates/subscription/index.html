@@ -78,17 +78,17 @@
             [{% for link in user.links %}"{{ link | replace('\\', '\\\\') | replace('"', '\\"') }}"{% if not loop.last %},{% endif %}{% endfor %}]
         </script>
 
-        <div class="card">
-            <div class="section-title">Apps</div>
-            <div class="apps">
-                <span class="chip">Happ (iOS / Android)</span>
-                <span class="chip">v2rayNG (Android)</span>
-                <span class="chip">Streisand (iOS)</span>
-                <span class="chip">v2rayN (Windows)</span>
-                <span class="chip">V2Box (macOS)</span>
-            </div>
-        </div>
         {% endif %}
+
+        <div class="card">
+            <div class="section-title">Installation Guide</div>
+            <select id="platformSelect" class="platform-select">
+                <option value="android">Android</option>
+                <option value="ios">iOS</option>
+            </select>
+            <ol class="install-steps" id="installSteps"></ol>
+            <div class="apps" id="installApps"></div>
+        </div>
 
         <div class="footer">INIX VPN &middot; {{ user.username }}</div>
     </div>

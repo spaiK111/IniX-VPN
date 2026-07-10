@@ -74,6 +74,69 @@ function initProgressBars() {
     });
 }
 
+const INSTALL_GUIDES = {
+    android: {
+        steps: [
+            "Install one of the apps below on your device.",
+            'Open the app and tap "+" to add a new profile.',
+            'Copy your link above, then choose "Import from Clipboard" (or paste it manually).',
+            "Select the server in the list and tap Connect."
+        ],
+        apps: [
+            { name: "Happ", url: "https://play.google.com/store/search?q=happ+proxy&c=apps" },
+            { name: "v2RayTun", url: "https://play.google.com/store/search?q=v2raytun&c=apps" },
+            { name: "FlClashX", url: "https://play.google.com/store/search?q=flclash&c=apps" }
+        ]
+    },
+    ios: {
+        steps: [
+            "Install one of the apps below from the App Store.",
+            'Open the app and tap "+" to add a new configuration.',
+            "Paste your subscription link from above, or scan the QR code.",
+            "Select the server and tap Connect."
+        ],
+        apps: [
+            { name: "Happ", url: "https://apps.apple.com/search?term=happ%20proxy" },
+            { name: "v2RayTun", url: "https://apps.apple.com/search?term=v2raytun" },
+            { name: "FlClashX", url: "https://apps.apple.com/search?term=flclash" },
+            { name: "Clash Mi", url: "https://apps.apple.com/search?term=clash%20mi" },
+            { name: "Shadowrocket", url: "https://apps.apple.com/search?term=shadowrocket" }
+        ]
+    }
+};
+
+function renderInstallGuide(platform) {
+    const guide = INSTALL_GUIDES[platform];
+    const stepsEl = document.getElementById("installSteps");
+    const appsEl = document.getElementById("installApps");
+    if (!guide || !stepsEl || !appsEl) return;
+
+    stepsEl.innerHTML = "";
+    guide.steps.forEach((step) => {
+        const li = document.createElement("li");
+        li.textContent = step;
+        stepsEl.appendChild(li);
+    });
+
+    appsEl.innerHTML = "";
+    guide.apps.forEach((app) => {
+        const a = document.createElement("a");
+        a.className = "chip";
+        a.href = app.url;
+        a.target = "_blank";
+        a.rel = "noopener noreferrer";
+        a.textContent = app.name;
+        appsEl.appendChild(a);
+    });
+}
+
+function initInstallGuide() {
+    const select = document.getElementById("platformSelect");
+    if (!select) return;
+    renderInstallGuide(select.value);
+    select.addEventListener("change", () => renderInstallGuide(select.value));
+}
+
 function initSubscriptionPage() {
     const links = readLinksData();
     if (links.length === 0) return;
@@ -94,4 +157,5 @@ function initSubscriptionPage() {
 document.addEventListener("DOMContentLoaded", () => {
     initProgressBars();
     initSubscriptionPage();
+    initInstallGuide();
 });
