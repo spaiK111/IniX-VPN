@@ -38,24 +38,38 @@ def get_lang(context: ContextTypes.DEFAULT_TYPE) -> str:
     return context.user_data.get("lang", DEFAULT_LANG)
 
 
-def home_keyboard(lang: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([
+def _connect_row(lang: str, subscription_url: str | None) -> list:
+    if not subscription_url:
+        return []
+    return [InlineKeyboardButton(t(lang, "btn_connect"), url=subscription_url)]
+
+
+def home_keyboard(lang: str, subscription_url: str | None = None) -> InlineKeyboardMarkup:
+    rows = [
         [
             InlineKeyboardButton(t(lang, "btn_info"), callback_data="link"),
             InlineKeyboardButton(t(lang, "btn_status"), callback_data="status"),
         ],
-        [InlineKeyboardButton(t(lang, "btn_language"), callback_data="language")],
-    ])
+    ]
+    connect_row = _connect_row(lang, subscription_url)
+    if connect_row:
+        rows.append(connect_row)
+    rows.append([InlineKeyboardButton(t(lang, "btn_language"), callback_data="language")])
+    return InlineKeyboardMarkup(rows)
 
 
-def result_keyboard(lang: str) -> InlineKeyboardMarkup:
-    return InlineKeyboardMarkup([
+def result_keyboard(lang: str, subscription_url: str | None = None) -> InlineKeyboardMarkup:
+    rows = [
         [
             InlineKeyboardButton(t(lang, "btn_info"), callback_data="link"),
             InlineKeyboardButton(t(lang, "btn_status"), callback_data="status"),
         ],
-        [InlineKeyboardButton(t(lang, "btn_home"), callback_data="home")],
-    ])
+    ]
+    connect_row = _connect_row(lang, subscription_url)
+    if connect_row:
+        rows.append(connect_row)
+    rows.append([InlineKeyboardButton(t(lang, "btn_home"), callback_data="home")])
+    return InlineKeyboardMarkup(rows)
 
 
 def language_keyboard(lang: str) -> InlineKeyboardMarkup:
@@ -198,41 +212,46 @@ def build_status_text(lang: str, user: dict) -> str:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = get_lang(context)
     telegram_id = update.effective_user.id
+    sub_url = None
     try:
         user, just_created = get_or_create_user(telegram_id)
         text = build_home_text(lang, user, telegram_id, just_created)
+        sub_url = user.get("subscription_url")
     except Exception as e:
         log.exception("start command failed")
         text = f"{t(lang, 'error')}: {html.escape(str(e))}"
-    await update.message.reply_text(text, reply_markup=home_keyboard(lang), parse_mode="HTML")
+    await update.message.reply_text(text, reply_markup=home_keyboard(lang, sub_url), parse_mode="HTML")
 
 
 async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = get_lang(context)
     telegram_id = update.effective_user.id
+    sub_url = None
     try:
         user = find_user_by_telegram_id(telegram_id)
-        text = (
-            build_link_text(lang, user, telegram_id)
-            if user
-            else f"{t(lang, 'telegram_id')}: {telegram_id}\n\n{t(lang, 'no_link')}"
-        )
+        if user:
+            text = build_link_text(lang, user, telegram_id)
+            sub_url = user.get("subscription_url")
+        else:
+            text = f"{t(lang, 'telegram_id')}: {telegram_id}\n\n{t(lang, 'no_link')}"
     except Exception as e:
         log.exception("link command failed")
         text = f"{t(lang, 'error_fetching')}: {html.escape(str(e))}"
-    await update.message.reply_text(text, reply_markup=result_keyboard(lang), parse_mode="HTML")
+    await update.message.reply_text(text, reply_markup=result_keyboard(lang, sub_url), parse_mode="HTML")
 
 
 async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = get_lang(context)
     telegram_id = update.effective_user.id
+    sub_url = None
     try:
         user = find_user_by_telegram_id(telegram_id)
         text = build_status_text(lang, user) if user else t(lang, "no_link")
+        sub_url = user.get("subscription_url") if user else None
     except Exception as e:
         log.exception("status command failed")
         text = f"{t(lang, 'error_fetching')}: {html.escape(str(e))}"
-    await update.message.reply_text(text, reply_markup=result_keyboard(lang), parse_mode="HTML")
+    await update.message.reply_text(text, reply_markup=result_keyboard(lang, sub_url), parse_mode="HTML")
 
 
 async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -245,7 +264,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if query.data == "home":
             user, just_created = get_or_create_user(telegram_id)
             text = build_home_text(lang, user, telegram_id, just_created)
-            keyboard = home_keyboard(lang)
+            keyboard = home_keyboard(lang, user.get("subscription_url"))
 
         elif query.data == "language":
             text = t(lang, "choose_language")
@@ -261,7 +280,8 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         else:
             user = find_user_by_telegram_id(telegram_id)
-            keyboard = result_keyboard(lang)
+            sub_url = user.get("subscription_url") if user else None
+            keyboard = result_keyboard(lang, sub_url)
             if query.data == "link":
                 text = (
                     build_link_text(lang, user, telegram_id)

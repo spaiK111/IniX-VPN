@@ -183,6 +183,32 @@
             margin: 0 0 12px;
         }
 
+        .protocol-tabs {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin-bottom: 14px;
+        }
+
+        .proto-tab {
+            font-family: inherit;
+            font-size: 12px;
+            font-weight: 600;
+            padding: 7px 14px;
+            border-radius: 999px;
+            border: 1px solid var(--border);
+            background: transparent;
+            color: var(--text-dim);
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .proto-tab.active {
+            background: var(--accent-soft);
+            border-color: var(--accent-edge);
+            color: var(--accent-light);
+        }
+
         .link-panel {
             background: var(--panel-2);
             border: 1px solid var(--border);
@@ -331,18 +357,32 @@
         </div>
 
         {% if user.status.value in ['active', 'on_hold'] and user.links %}
+        {% set proto_names = {'vless': 'VLESS', 'vmess': 'VMess', 'trojan': 'Trojan', 'ss': 'Shadowsocks'} %}
         <div class="card">
             <div class="section-title">Connection</div>
-            {% for link in user.links %}
+            <div class="protocol-tabs">
+                {% for link in user.links %}
+                {% set proto = link.split('://')[0] %}
+                <button class="proto-tab{% if loop.first %} active{% endif %}" data-index="{{ loop.index0 }}">
+                    {{ proto_names.get(proto, proto|upper) }}
+                </button>
+                {% endfor %}
+            </div>
             <div class="link-panel">
-                <div class="link-text" id="link-{{ loop.index }}">{{ link }}</div>
+                <div class="link-text" id="activeLink">{{ user.links[0] }}</div>
                 <div class="btn-row">
-                    <button class="btn btn-primary" onclick="copyLink('{{ link }}', this)">Copy</button>
-                    <button class="btn btn-outline qr-button" data-link="{{ link }}">QR Code</button>
+                    <button class="btn btn-primary" id="copyBtn">Copy</button>
+                    <button class="btn btn-outline" id="qrBtn">QR Code</button>
                 </div>
             </div>
-            {% endfor %}
         </div>
+
+        <script>
+            const vpnLinks = [
+                {% for link in user.links %}"{{ link | replace('\\', '\\\\') | replace('"', '\\"') }}"{% if not loop.last %},{% endif %}
+                {% endfor %}
+            ];
+        </script>
 
         <div class="card">
             <div class="section-title">Apps</div>
@@ -367,6 +407,24 @@
     </div>
 
     <script>
+        let currentProtocolIndex = 0;
+
+        function updateActiveLink() {
+            const linkEl = document.getElementById('activeLink');
+            if (linkEl && typeof vpnLinks !== 'undefined') {
+                linkEl.textContent = vpnLinks[currentProtocolIndex];
+            }
+        }
+
+        document.querySelectorAll('.proto-tab').forEach((tab) => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.proto-tab').forEach((t) => t.classList.remove('active'));
+                tab.classList.add('active');
+                currentProtocolIndex = parseInt(tab.dataset.index, 10);
+                updateActiveLink();
+            });
+        });
+
         function copyLink(link, button) {
             const tempInput = document.createElement('input');
             tempInput.setAttribute('value', link);
@@ -380,25 +438,29 @@
             setTimeout(function () { button.textContent = original; }, 1500);
         }
 
-        const qrButtons = document.querySelectorAll('.qr-button');
+        const copyBtn = document.getElementById('copyBtn');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', () => copyLink(vpnLinks[currentProtocolIndex], copyBtn));
+        }
+
         const qrPopup = document.getElementById('qrPopup');
         const qrCodeContainer = document.getElementById('qrCodeContainer');
+        const qrBtn = document.getElementById('qrBtn');
 
-        qrButtons.forEach((qrButton) => {
-            qrButton.addEventListener('click', () => {
-                const link = qrButton.dataset.link;
+        if (qrBtn) {
+            qrBtn.addEventListener('click', () => {
                 while (qrCodeContainer.firstChild) {
                     qrCodeContainer.removeChild(qrCodeContainer.firstChild);
                 }
                 new QRCode(qrCodeContainer, {
-                    text: link,
+                    text: vpnLinks[currentProtocolIndex],
                     width: 220,
                     height: 220,
                     correctLevel: QRCode.CorrectLevel.L
                 });
                 qrPopup.style.display = 'block';
             });
-        });
+        }
 
         function closeQrPopup() {
             qrPopup.style.display = 'none';
