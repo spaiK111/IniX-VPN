@@ -68,6 +68,12 @@ function initQrPopup(getActiveLink) {
     }
 }
 
+function initProgressBars() {
+    document.querySelectorAll(".progress-fill[data-percent]").forEach((bar) => {
+        bar.style.width = bar.dataset.percent + "%";
+    });
+}
+
 function initSubscriptionPage() {
     const links = readLinksData();
     if (links.length === 0) return;
@@ -85,4 +91,7 @@ function initSubscriptionPage() {
     initQrPopup(() => activeLink);
 }
 
-document.addEventListener("DOMContentLoaded", initSubscriptionPage);
+document.addEventListener("DOMContentLoaded", () => {
+    initProgressBars();
+    initSubscriptionPage();
+});

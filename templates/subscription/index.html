@@ -45,7 +45,7 @@
                     {% if user.data_limit %}
                     <div class="progress-track">
                         <div class="progress-fill"
-                            style="width: {{ [(user.used_traffic / user.data_limit * 100) | round(1), 100] | min }}%">
+                            data-percent="{{ [(user.used_traffic / user.data_limit * 100) | round(1), 100] | min }}">
                         </div>
                     </div>
                     {% endif %}
