@@ -74,15 +74,6 @@ function initProgressBars() {
     });
 }
 
-// Generic fallback steps for platforms that don't (yet) have per-app
-// instructions - every app on that platform shares this same text.
-const GENERIC_DESKTOP_STEPS = [
-    "Download and install one of the apps below.",
-    "Open the app and find its subscription/profile settings.",
-    "Add a new subscription using your link from above (or import from clipboard).",
-    "Select the server in the list and connect."
-];
-
 const INSTALL_GUIDES = {
     android: {
         apps: [
@@ -120,31 +111,148 @@ const INSTALL_GUIDES = {
     },
     ios: {
         apps: [
-            { name: "Happ", url: "https://apps.apple.com/search?term=happ%20proxy", steps: GENERIC_DESKTOP_STEPS },
-            { name: "v2RayTun", url: "https://apps.apple.com/search?term=v2raytun", steps: GENERIC_DESKTOP_STEPS },
-            { name: "FlClashX", url: "https://apps.apple.com/search?term=flclash", steps: GENERIC_DESKTOP_STEPS },
-            { name: "Clash Mi", url: "https://apps.apple.com/search?term=clash%20mi", steps: GENERIC_DESKTOP_STEPS },
-            { name: "Shadowrocket", url: "https://apps.apple.com/search?term=shadowrocket", steps: GENERIC_DESKTOP_STEPS }
+            {
+                name: "Happ",
+                url: "https://apps.apple.com/search?term=happ%20proxy",
+                steps: [
+                    "Install Happ using the button below.",
+                    'Open Happ and tap the "+" button in the top right.',
+                    'Copy your link above, then tap "Add from clipboard".',
+                    "Tap the server that appears and press the big Connect button."
+                ]
+            },
+            {
+                name: "v2RayTun",
+                url: "https://apps.apple.com/search?term=v2raytun",
+                steps: [
+                    "Install v2RayTun using the button below.",
+                    'Open the app and tap the "+" icon.',
+                    'Copy your link above, then choose "Import from clipboard".',
+                    "Select the server and tap the Connect button."
+                ]
+            },
+            {
+                name: "FlClashX",
+                url: "https://apps.apple.com/search?term=flclash",
+                steps: [
+                    "Install FlClash using the button below.",
+                    'Open the app, go to "Profiles" and tap "+".',
+                    'Copy your link above, then choose "Import from clipboard" (or paste the URL directly).',
+                    "Select the profile and toggle the connection switch."
+                ]
+            },
+            {
+                name: "Clash Mi",
+                url: "https://apps.apple.com/search?term=clash%20mi",
+                steps: [
+                    "Install Clash Mi using the button below.",
+                    'Open the app and go to the "Profiles" tab.',
+                    'Tap "+" and choose "Import from clipboard" after copying your link above.',
+                    "Select the profile and turn on the VPN toggle."
+                ]
+            },
+            {
+                name: "Shadowrocket",
+                url: "https://apps.apple.com/search?term=shadowrocket",
+                steps: [
+                    "Install Shadowrocket using the button below (paid app).",
+                    'Open the app and tap the "+" in the top right.',
+                    'Copy your link above, then tap "Add from clipboard" (or tap Type and paste manually).',
+                    "Tap the server and toggle the switch at the top to connect."
+                ]
+            }
         ]
     },
     windows: {
         apps: [
-            { name: "v2rayN", url: "https://github.com/2dust/v2rayN/releases", steps: GENERIC_DESKTOP_STEPS },
-            { name: "NekoRay", url: "https://github.com/MatsuriDayo/nekoray/releases", steps: GENERIC_DESKTOP_STEPS },
-            { name: "Clash Verge Rev", url: "https://github.com/clash-verge-rev/clash-verge-rev/releases", steps: GENERIC_DESKTOP_STEPS }
+            {
+                name: "v2rayN",
+                url: "https://github.com/2dust/v2rayN/releases",
+                steps: [
+                    "Download and extract v2rayN using the button below (no installer needed, just unzip and run).",
+                    'Copy your link above, then go to Servers → "Import bulk URL from clipboard".',
+                    "Select the server in the list and right-click it, then choose \"Set as active server\".",
+                    "Enable the system proxy from the tray icon to start routing traffic."
+                ]
+            },
+            {
+                name: "NekoRay",
+                url: "https://github.com/MatsuriDayo/nekoray/releases",
+                steps: [
+                    "Download and install NekoRay using the button below.",
+                    'Copy your link above, then go to Program → "Add profile from clipboard".',
+                    'Select the profile, right-click it and choose "Start".',
+                    "Enable the system proxy option if you want all apps routed automatically."
+                ]
+            },
+            {
+                name: "Clash Verge Rev",
+                url: "https://github.com/clash-verge-rev/clash-verge-rev/releases",
+                steps: [
+                    "Download and install Clash Verge Rev using the button below.",
+                    'Open the app and go to the "Profiles" tab.',
+                    'Click "Import", paste your link from above, and confirm.',
+                    'Select the profile and enable the "System Proxy" toggle.'
+                ]
+            }
         ]
     },
     macos: {
         apps: [
-            { name: "V2Box", url: "https://apps.apple.com/search?term=v2box", steps: GENERIC_DESKTOP_STEPS },
-            { name: "NekoRay", url: "https://github.com/MatsuriDayo/nekoray/releases", steps: GENERIC_DESKTOP_STEPS },
-            { name: "Clash Verge Rev", url: "https://github.com/clash-verge-rev/clash-verge-rev/releases", steps: GENERIC_DESKTOP_STEPS }
+            {
+                name: "V2Box",
+                url: "https://apps.apple.com/search?term=v2box",
+                steps: [
+                    "Install V2Box using the button below.",
+                    'Open the app and tap the "+" button to add a new configuration.',
+                    'Copy your link above, then choose "Import from clipboard".',
+                    "Select the server and tap Connect."
+                ]
+            },
+            {
+                name: "NekoRay",
+                url: "https://github.com/MatsuriDayo/nekoray/releases",
+                steps: [
+                    "Download NekoRay using the button below and move it to your Applications folder.",
+                    'Copy your link above, then go to Program → "Add profile from clipboard".',
+                    'Select the profile, right-click it and choose "Start".',
+                    "Enable the system proxy option if you want all apps routed automatically."
+                ]
+            },
+            {
+                name: "Clash Verge Rev",
+                url: "https://github.com/clash-verge-rev/clash-verge-rev/releases",
+                steps: [
+                    "Download and install Clash Verge Rev using the button below.",
+                    'Open the app and go to the "Profiles" tab.',
+                    'Click "Import", paste your link from above, and confirm.',
+                    'Select the profile and enable the "System Proxy" toggle.'
+                ]
+            }
         ]
     },
     linux: {
         apps: [
-            { name: "NekoRay", url: "https://github.com/MatsuriDayo/nekoray/releases", steps: GENERIC_DESKTOP_STEPS },
-            { name: "Clash Verge Rev", url: "https://github.com/clash-verge-rev/clash-verge-rev/releases", steps: GENERIC_DESKTOP_STEPS }
+            {
+                name: "NekoRay",
+                url: "https://github.com/MatsuriDayo/nekoray/releases",
+                steps: [
+                    "Download the AppImage (or archive for your distro) using the button below.",
+                    "Make it executable (chmod +x) and run it.",
+                    'Copy your link above, then go to Program → "Add profile from clipboard".',
+                    'Select the profile, right-click it and choose "Start".'
+                ]
+            },
+            {
+                name: "Clash Verge Rev",
+                url: "https://github.com/clash-verge-rev/clash-verge-rev/releases",
+                steps: [
+                    "Download the package for your distro (.deb/.rpm/AppImage) using the button below.",
+                    'Open the app and go to the "Profiles" tab.',
+                    'Click "Import", paste your link from above, and confirm.',
+                    'Select the profile and enable the "System Proxy" toggle.'
+                ]
+            }
         ]
     }
 };
