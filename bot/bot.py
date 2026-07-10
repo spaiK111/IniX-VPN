@@ -38,6 +38,15 @@ def get_lang(context: ContextTypes.DEFAULT_TYPE) -> str:
     return context.user_data.get("lang", DEFAULT_LANG)
 
 
+def connect_url_for(user: dict | None) -> str | None:
+    """Only surface the Connect button for users whose Marzban status is
+    actually 'active' — disabled/pending/expired/limited accounts don't get
+    a usable connection, so linking them there would be misleading."""
+    if not user or user.get("status") != "active":
+        return None
+    return user.get("subscription_url")
+
+
 def _connect_row(lang: str, subscription_url: str | None) -> list:
     if not subscription_url:
         return []
@@ -216,7 +225,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         user, just_created = get_or_create_user(telegram_id)
         text = build_home_text(lang, user, telegram_id, just_created)
-        sub_url = user.get("subscription_url")
+        sub_url = connect_url_for(user)
     except Exception as e:
         log.exception("start command failed")
         text = f"{t(lang, 'error')}: {html.escape(str(e))}"
@@ -231,7 +240,7 @@ async def link(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user = find_user_by_telegram_id(telegram_id)
         if user:
             text = build_link_text(lang, user, telegram_id)
-            sub_url = user.get("subscription_url")
+            sub_url = connect_url_for(user)
         else:
             text = f"{t(lang, 'telegram_id')}: {telegram_id}\n\n{t(lang, 'no_link')}"
     except Exception as e:
@@ -247,7 +256,7 @@ async def status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         user = find_user_by_telegram_id(telegram_id)
         text = build_status_text(lang, user) if user else t(lang, "no_link")
-        sub_url = user.get("subscription_url") if user else None
+        sub_url = connect_url_for(user)
     except Exception as e:
         log.exception("status command failed")
         text = f"{t(lang, 'error_fetching')}: {html.escape(str(e))}"
@@ -264,7 +273,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if query.data == "home":
             user, just_created = get_or_create_user(telegram_id)
             text = build_home_text(lang, user, telegram_id, just_created)
-            keyboard = home_keyboard(lang, user.get("subscription_url"))
+            keyboard = home_keyboard(lang, connect_url_for(user))
 
         elif query.data == "language":
             text = t(lang, "choose_language")
@@ -280,7 +289,7 @@ async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         else:
             user = find_user_by_telegram_id(telegram_id)
-            sub_url = user.get("subscription_url") if user else None
+            sub_url = connect_url_for(user)
             keyboard = result_keyboard(lang, sub_url)
             if query.data == "link":
                 text = (
