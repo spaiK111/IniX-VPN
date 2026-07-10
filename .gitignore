@@ -4,3 +4,5 @@ xray_config.json
 *.pem
 *.key
 vps/.env
+__pycache__/
+*.pyc
