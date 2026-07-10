@@ -251,6 +251,7 @@ h1 {
     display: flex;
     flex-wrap: wrap;
     gap: 8px;
+    margin-bottom: 20px;
 }
 
 .apps .chip {
