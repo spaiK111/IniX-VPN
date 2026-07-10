@@ -35,3 +35,26 @@ for i, line in enumerate(lines):
 with open(path, "w") as f:
     f.writelines(lines)
 PYEOF
+
+# Marzban has no built-in way to serve arbitrary static files (e.g. a logo
+# used by a custom subscription page template). Mount /var/lib/marzban/assets
+# (already volume-mounted) at /assets so it's served with proper Cache-Control
+# / ETag headers instead of inlining assets as base64 in the template.
+RUN python3 - <<'PYEOF'
+path = "/code/app/__init__.py"
+with open(path) as f:
+    content = f.read()
+
+marker = "app.include_router(api_router)\n"
+addition = (
+    "\nfrom fastapi.staticfiles import StaticFiles  # noqa\n"
+    "import os as _os  # noqa\n"
+    "if _os.path.isdir('/var/lib/marzban/assets'):\n"
+    "    app.mount('/assets', StaticFiles(directory='/var/lib/marzban/assets'), name='custom_assets')\n"
+)
+assert marker in content, "include_router marker not found"
+content = content.replace(marker, marker + addition, 1)
+
+with open(path, "w") as f:
+    f.write(content)
+PYEOF
