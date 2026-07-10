@@ -17,7 +17,7 @@
         <div class="card">
             <div class="row">
                 <div>
-                    <h1>{{ user.username }}</h1>
+                    <h1>user_{{ user.username }}</h1>
                 </div>
                 <span
                     class="badge {% if user.status.value == 'active' %}active{% elif user.status.value == 'limited' %}limited{% elif user.status.value == 'expired' %}expired{% elif user.status.value == 'on_hold' %}on_hold{% else %}disabled{% endif %}">
