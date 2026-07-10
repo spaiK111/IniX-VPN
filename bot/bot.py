@@ -121,7 +121,7 @@ def find_user_by_telegram_id(telegram_id: int, token: str | None = None) -> dict
 
 def create_disabled_user_for_telegram(telegram_id: int, token: str | None = None) -> dict:
     """Creates a new Marzban user (random numeric username) for a first-time
-    bot user, with a vless proxy already configured but status=disabled
+    bot user, with all 4 protocols already configured but status=disabled
     until an admin activates it."""
     token = token or get_marzban_token()
 
@@ -132,8 +132,18 @@ def create_disabled_user_for_telegram(telegram_id: int, token: str | None = None
             headers={"Authorization": f"Bearer {token}"},
             json={
                 "username": username,
-                "proxies": {"vless": {"flow": "xtls-rprx-vision"}},
-                "inbounds": {"vless": ["VLESS TCP REALITY"]},
+                "proxies": {
+                    "vless": {"flow": "xtls-rprx-vision"},
+                    "vmess": {},
+                    "trojan": {},
+                    "shadowsocks": {"method": "chacha20-ietf-poly1305"},
+                },
+                "inbounds": {
+                    "vless": ["VLESS TCP REALITY"],
+                    "vmess": ["VMess TCP TLS"],
+                    "trojan": ["Trojan TCP TLS"],
+                    "shadowsocks": ["Shadowsocks TCP"],
+                },
                 "expire": 0,
                 "data_limit": 0,
                 "data_limit_reset_strategy": "no_reset",
