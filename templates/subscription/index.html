@@ -6,7 +6,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <link rel="icon" type="image/png" href="/assets/logo.png">
     <link rel="stylesheet" href="/assets/subscription.css">
-    <title>{{ user.username }} — INIX VPN</title>
+    <title>user_{{ user.username }} — INIX VPN</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 </head>
 
@@ -91,8 +91,6 @@
             </select>
             <div class="apps" id="installApps"></div>
             <ol class="install-steps" id="installSteps"></ol>
-            <a class="btn btn-outline" id="installDownloadBtn" target="_blank" rel="noopener noreferrer"
-                style="display:none">Get the app ↗</a>
         </div>
 
         <div class="footer">INIX VPN &middot; {{ user.username }}</div>

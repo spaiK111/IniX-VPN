@@ -221,6 +221,13 @@ h1 {
     gap: 8px;
 }
 
+.store-btn {
+    display: block;
+    width: fit-content;
+    text-decoration: none;
+    margin: 8px 0 4px;
+}
+
 .btn {
     font-family: inherit;
     font-size: 12px;
@@ -277,12 +284,6 @@ h1 {
     background: var(--accent-soft);
     border-color: var(--accent-edge);
     color: var(--accent-light);
-}
-
-#installDownloadBtn {
-    margin-top: 14px;
-    display: inline-block;
-    text-decoration: none;
 }
 
 .platform-select {

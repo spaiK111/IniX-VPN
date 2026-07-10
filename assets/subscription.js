@@ -257,23 +257,33 @@ const INSTALL_GUIDES = {
     }
 };
 
+function storeButtonLabel(url) {
+    if (url.includes("apps.apple.com")) return "Open in App Store";
+    if (url.includes("play.google.com")) return "Open in Play Store";
+    return "Download";
+}
+
 function renderInstallSteps(app) {
     const stepsEl = document.getElementById("installSteps");
-    const downloadBtn = document.getElementById("installDownloadBtn");
     if (!stepsEl) return;
 
     stepsEl.innerHTML = "";
-    app.steps.forEach((step) => {
+    app.steps.forEach((step, index) => {
         const li = document.createElement("li");
         li.textContent = step;
+
+        if (index === 0 && app.url) {
+            const storeBtn = document.createElement("a");
+            storeBtn.className = "btn btn-outline store-btn";
+            storeBtn.href = app.url;
+            storeBtn.target = "_blank";
+            storeBtn.rel = "noopener noreferrer";
+            storeBtn.textContent = storeButtonLabel(app.url) + " ↗";
+            li.appendChild(storeBtn);
+        }
+
         stepsEl.appendChild(li);
     });
-
-    if (downloadBtn) {
-        downloadBtn.href = app.url;
-        downloadBtn.textContent = "Get " + app.name + " ↗";
-        downloadBtn.style.display = "inline-block";
-    }
 }
 
 function renderInstallGuide(platform) {
