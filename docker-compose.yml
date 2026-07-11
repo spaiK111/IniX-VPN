@@ -1,13 +1,4 @@
 services:
-  marzban:
-    image: ghcr.io/spaik111/vpn-service:latest
-    restart: always
-    env_file: .env
-    network_mode: host
-    volumes:
-      - /var/lib/marzban:/var/lib/marzban
-      - /etc/letsencrypt:/etc/letsencrypt:ro
-
   telegram-bot:
     image: ghcr.io/spaik111/vpn-service-bot:latest
     restart: always

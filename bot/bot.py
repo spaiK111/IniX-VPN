@@ -24,9 +24,16 @@ log = logging.getLogger("vpn-bot")
 
 BOT_TOKEN = os.environ["TELEGRAM_BOT_TOKEN"]
 
-MARZBAN_API_URL = os.environ.get("MARZBAN_API_URL", "http://127.0.0.1:8000")
-MARZBAN_ADMIN_USERNAME = os.environ["MARZBAN_ADMIN_USERNAME"]
-MARZBAN_ADMIN_PASSWORD = os.environ["MARZBAN_ADMIN_PASSWORD"]
+REMNAWAVE_API_URL = os.environ.get("REMNAWAVE_API_URL", "http://127.0.0.1:3000")
+REMNAWAVE_API_TOKEN = os.environ["REMNAWAVE_API_TOKEN"]
+REMNAWAVE_DEFAULT_SQUAD_UUID = os.environ["REMNAWAVE_DEFAULT_SQUAD_UUID"]
+REMNAWAVE_VERIFY_TLS = os.environ.get("REMNAWAVE_VERIFY_TLS", "true").lower() != "false"
+
+# Remnawave requires a concrete expireAt date (no "0 = unlimited" like Marzban had).
+# Accounts meant to never expire get this far-future sentinel instead; anything at
+# or beyond this year is displayed as "unlimited".
+UNLIMITED_EXPIRE_YEAR = 2099
+UNLIMITED_EXPIRE_AT = datetime(UNLIMITED_EXPIRE_YEAR, 1, 1, tzinfo=timezone.utc)
 
 SERVER_PUBLIC_IP = os.environ["SERVER_PUBLIC_IP"]
 SERVER_PORT = int(os.environ.get("SERVER_PORT", "443"))
@@ -58,29 +65,29 @@ def find_mongo_user(telegram_id: int) -> dict | None:
         return None
 
 
-def upsert_mongo_user(telegram_id: int, marzban_username: str, marzban_status: str) -> None:
+def upsert_mongo_user(telegram_id: int, remnawave_username: str, remnawave_status: str) -> None:
     """Creates or updates the MongoDB record for this Telegram user.
 
     On first creation, subscription_status mirrors the freshly created
-    Marzban account (inactive/disabled until an admin approves it). For
+    Remnawave account (inactive/disabled until an admin approves it). For
     users that already exist, their stored subscription_status is left
     untouched here - it's a business-level field an admin may set
-    independently of Marzban's technical status.
+    independently of Remnawave's technical status.
 
     Best-effort: MongoDB is a supplementary bookkeeping store, not the
-    source of truth for VPN access (Marzban is), so a Mongo outage must
+    source of truth for VPN access (Remnawave is), so a Mongo outage must
     never break /start.
     """
     if mongo_users_collection is None:
         return
     try:
         now = datetime.now(timezone.utc)
-        initial_status = "active" if marzban_status in ("active", "on_hold") else "inactive"
+        initial_status = "active" if remnawave_status == "ACTIVE" else "inactive"
         mongo_users_collection.update_one(
             {"telegram_id": telegram_id},
             {
                 "$set": {
-                    "marzban_username": marzban_username,
+                    "marzban_username": remnawave_username,
                     "updated_at": now,
                 },
                 "$setOnInsert": {
@@ -101,12 +108,12 @@ def get_lang(context: ContextTypes.DEFAULT_TYPE) -> str:
 
 
 def connect_url_for(user: dict | None) -> str | None:
-    """Only surface the Connect button for users whose Marzban status is
-    actually 'active' — disabled/pending/expired/limited accounts don't get
+    """Only surface the Connect button for users whose Remnawave status is
+    actually 'ACTIVE' — disabled/pending/expired/limited accounts don't get
     a usable connection, so linking them there would be misleading."""
-    if not user or user.get("status") != "active":
+    if not user or user.get("status") != "ACTIVE":
         return None
-    return user.get("subscription_url")
+    return user.get("subscriptionUrl")
 
 
 def _connect_row(lang: str, subscription_url: str | None) -> list:
@@ -150,102 +157,70 @@ def language_keyboard(lang: str) -> InlineKeyboardMarkup:
     ])
 
 
-def get_marzban_token() -> str:
-    resp = requests.post(
-        f"{MARZBAN_API_URL}/api/admin/token",
-        data={"username": MARZBAN_ADMIN_USERNAME, "password": MARZBAN_ADMIN_PASSWORD},
-        timeout=10,
-    )
-    resp.raise_for_status()
-    return resp.json()["access_token"]
+def _remnawave_headers() -> dict:
+    return {"Authorization": f"Bearer {REMNAWAVE_API_TOKEN}"}
 
 
-def find_user_by_telegram_id(telegram_id: int, token: str | None = None) -> dict | None:
-    """Finds the Marzban user whose `note` field holds this Telegram ID.
+def find_user_by_telegram_id(telegram_id: int) -> dict | None:
+    """Finds the Remnawave user with this Telegram ID.
 
-    We can't use the Telegram ID as the Marzban username directly since new
-    accounts get a random numeric username instead, so the note field is
-    the only link between the two.
+    Unlike Marzban (which had no such field and needed the `note` field as a
+    workaround), Remnawave has a native `telegramId` column with a dedicated
+    lookup endpoint.
     """
-    token = token or get_marzban_token()
     resp = requests.get(
-        f"{MARZBAN_API_URL}/api/users",
-        headers={"Authorization": f"Bearer {token}"},
-        params={"search": str(telegram_id)},
+        f"{REMNAWAVE_API_URL}/api/users/by-telegram-id/{telegram_id}",
+        headers=_remnawave_headers(),
         timeout=10,
+        verify=REMNAWAVE_VERIFY_TLS,
     )
     resp.raise_for_status()
-    for user in resp.json().get("users", []):
-        if user.get("note") == str(telegram_id):
-            return user
-    return None
+    users = resp.json().get("response") or []
+    return users[0] if users else None
 
 
-def create_disabled_user_for_telegram(telegram_id: int, token: str | None = None) -> dict:
-    """Creates a new Marzban user (random numeric username) for a first-time
-    bot user, with all 4 protocols already configured but status=disabled
-    until an admin activates it."""
-    token = token or get_marzban_token()
-
+def create_disabled_user_for_telegram(telegram_id: int) -> dict:
+    """Creates a new Remnawave user (random numeric username) for a first-time
+    bot user, with the default protocol squad already assigned but
+    status=DISABLED until an admin activates it."""
     for _ in range(5):
         username = str(random.randint(10**8, 10**9 - 1))
         resp = requests.post(
-            f"{MARZBAN_API_URL}/api/user",
-            headers={"Authorization": f"Bearer {token}"},
+            f"{REMNAWAVE_API_URL}/api/users",
+            headers=_remnawave_headers(),
             json={
                 "username": username,
-                "proxies": {
-                    "vless": {"flow": "xtls-rprx-vision"},
-                    "vmess": {},
-                    "trojan": {},
-                    "shadowsocks": {"method": "chacha20-ietf-poly1305"},
-                },
-                "inbounds": {
-                    "vless": ["VLESS TCP REALITY"],
-                    "vmess": ["VMess TCP TLS"],
-                    "trojan": ["Trojan TCP TLS"],
-                    "shadowsocks": ["Shadowsocks TCP"],
-                },
-                "expire": 0,
-                "data_limit": 0,
-                "data_limit_reset_strategy": "no_reset",
-                "status": "active",
-                "note": str(telegram_id),
+                "status": "DISABLED",
+                "telegramId": telegram_id,
+                "expireAt": UNLIMITED_EXPIRE_AT.isoformat().replace("+00:00", "Z"),
+                "trafficLimitBytes": 0,
+                "trafficLimitStrategy": "NO_RESET",
+                "activeInternalSquads": [REMNAWAVE_DEFAULT_SQUAD_UUID],
             },
             timeout=10,
+            verify=REMNAWAVE_VERIFY_TLS,
         )
-        if resp.status_code == 409:
+        if resp.status_code == 400 and "already exists" in resp.text:
             continue  # username collision, retry with a new random one
         resp.raise_for_status()
-        break
-    else:
-        raise RuntimeError("Could not find a free random username after 5 tries")
-
-    disable_resp = requests.put(
-        f"{MARZBAN_API_URL}/api/user/{username}",
-        headers={"Authorization": f"Bearer {token}"},
-        json={"status": "disabled"},
-        timeout=10,
-    )
-    disable_resp.raise_for_status()
-    return disable_resp.json()
+        return resp.json()["response"]
+    raise RuntimeError("Could not find a free random username after 5 tries")
 
 
 def get_or_create_user(telegram_id: int) -> tuple[dict, bool]:
     """Returns (user, was_just_created)."""
-    token = get_marzban_token()
-    user = find_user_by_telegram_id(telegram_id, token)
+    user = find_user_by_telegram_id(telegram_id)
     just_created = user is None
     if just_created:
-        user = create_disabled_user_for_telegram(telegram_id, token)
-    upsert_mongo_user(telegram_id, user["username"], user.get("status", "disabled"))
+        user = create_disabled_user_for_telegram(telegram_id)
+    upsert_mongo_user(telegram_id, user["username"], user.get("status", "DISABLED"))
     return user, just_created
 
 
 def build_home_text(lang: str, user: dict, telegram_id: int, just_created: bool) -> str:
     text = (
         f"{t(lang, 'telegram_id')}: {telegram_id}\n"
-        f"{t(lang, 'status')}: {status_label(lang, user.get('status', 'unknown'))}"
+        f"{t(lang, 'status')}: {status_label(lang, user.get('status', 'unknown').lower())}"
     )
     if just_created:
         text += f"\n\n{t(lang, 'pending_activation')}"
@@ -253,29 +228,39 @@ def build_home_text(lang: str, user: dict, telegram_id: int, just_created: bool)
 
 
 def build_link_text(lang: str, user: dict, telegram_id: int) -> str:
-    links = user.get("links") or []
-    if not links:
+    subscription_url = user.get("subscriptionUrl")
+    if not subscription_url:
         return f"{t(lang, 'telegram_id')}: {telegram_id}\n\n{t(lang, 'no_link')}"
 
-    expire = user.get("expire")
-    expire_text = t(lang, "unlimited") if not expire else time.strftime("%d.%m.%Y", time.localtime(expire))
-    used_mb = (user.get("used_traffic") or 0) / 1024 / 1024
+    expire_at = user.get("expireAt")
+    expire_text = t(lang, "unlimited")
+    if expire_at:
+        parsed = datetime.fromisoformat(expire_at.replace("Z", "+00:00"))
+        if parsed.year < UNLIMITED_EXPIRE_YEAR:
+            expire_text = parsed.strftime("%d.%m.%Y")
+    used_mb = (user.get("userTraffic", {}).get("usedTrafficBytes") or 0) / 1024 / 1024
 
     # <code> makes the link monospace and tap-to-copy in Telegram's mobile apps.
     return (
         f"{t(lang, 'telegram_id')}: {telegram_id}\n"
-        f"{t(lang, 'status')}: {status_label(lang, user.get('status', 'unknown'))}\n\n"
-        f"{t(lang, 'link_header')}\n<code>{html.escape(links[0])}</code>\n\n"
+        f"{t(lang, 'status')}: {status_label(lang, user.get('status', 'unknown').lower())}\n\n"
+        f"{t(lang, 'link_header')}\n<code>{html.escape(subscription_url)}</code>\n\n"
         f"{t(lang, 'valid_until')}: {expire_text}\n"
         f"{t(lang, 'usage_so_far')}: {used_mb:.1f} MB"
     )
 
 
 def build_status_text(lang: str, user: dict) -> str:
-    lines = [f"{t(lang, 'status')}: {status_label(lang, user.get('status', 'unknown'))}"]
+    lines = [f"{t(lang, 'status')}: {status_label(lang, user.get('status', 'unknown').lower())}"]
 
     try:
-        get_marzban_token()
+        resp = requests.get(
+            f"{REMNAWAVE_API_URL}/api/system/health",
+            headers=_remnawave_headers(),
+            timeout=10,
+            verify=REMNAWAVE_VERIFY_TLS,
+        )
+        resp.raise_for_status()
         lines.append(t(lang, "panel_reachable"))
     except Exception:
         lines.append(t(lang, "panel_unreachable"))
