@@ -47,8 +47,25 @@ if MONGODB_URI:
         log.exception("Failed to initialize MongoDB client")
 
 
-def upsert_mongo_user(telegram_id: int, marzban_username: str) -> None:
+def find_mongo_user(telegram_id: int) -> dict | None:
+    """Looks up the existing MongoDB record for this Telegram user, if any."""
+    if mongo_users_collection is None:
+        return None
+    try:
+        return mongo_users_collection.find_one({"telegram_id": telegram_id})
+    except Exception:
+        log.exception("Failed to look up MongoDB user %s", telegram_id)
+        return None
+
+
+def upsert_mongo_user(telegram_id: int, marzban_username: str, marzban_status: str) -> None:
     """Creates or updates the MongoDB record for this Telegram user.
+
+    On first creation, subscription_status mirrors the freshly created
+    Marzban account (inactive/disabled until an admin approves it). For
+    users that already exist, their stored subscription_status is left
+    untouched here - it's a business-level field an admin may set
+    independently of Marzban's technical status.
 
     Best-effort: MongoDB is a supplementary bookkeeping store, not the
     source of truth for VPN access (Marzban is), so a Mongo outage must
@@ -58,6 +75,7 @@ def upsert_mongo_user(telegram_id: int, marzban_username: str) -> None:
         return
     try:
         now = datetime.now(timezone.utc)
+        initial_status = "active" if marzban_status in ("active", "on_hold") else "inactive"
         mongo_users_collection.update_one(
             {"telegram_id": telegram_id},
             {
@@ -68,7 +86,7 @@ def upsert_mongo_user(telegram_id: int, marzban_username: str) -> None:
                 "$setOnInsert": {
                     "telegram_id": telegram_id,
                     "subscription_type": "free",
-                    "subscription_status": "active",
+                    "subscription_status": initial_status,
                     "created_at": now,
                 },
             },
@@ -220,7 +238,7 @@ def get_or_create_user(telegram_id: int) -> tuple[dict, bool]:
     just_created = user is None
     if just_created:
         user = create_disabled_user_for_telegram(telegram_id, token)
-    upsert_mongo_user(telegram_id, user["username"])
+    upsert_mongo_user(telegram_id, user["username"], user.get("status", "disabled"))
     return user, just_created
 
 
