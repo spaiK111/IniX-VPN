@@ -4,8 +4,10 @@ import os
 import random
 import socket
 import time
+from datetime import datetime, timezone
 
 import requests
+from pymongo import MongoClient
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     Application,
@@ -32,6 +34,48 @@ SERVER_PORT = int(os.environ.get("SERVER_PORT", "443"))
 PERSISTENCE_PATH = os.environ.get("PERSISTENCE_PATH", "/data/bot_persistence.pkl")
 
 LANGUAGE_LABELS = {"ru": "🇷🇺 Русский", "de": "🇩🇪 Deutsch", "en": "🇬🇧 English"}
+
+MONGODB_URI = os.environ.get("MONGODB_URI")
+MONGODB_DB = os.environ.get("MONGODB_DB", "inix_vpn")
+
+mongo_users_collection = None
+if MONGODB_URI:
+    try:
+        _mongo_client = MongoClient(MONGODB_URI, serverSelectionTimeoutMS=5000)
+        mongo_users_collection = _mongo_client[MONGODB_DB]["users"]
+    except Exception:
+        log.exception("Failed to initialize MongoDB client")
+
+
+def upsert_mongo_user(telegram_id: int, marzban_username: str) -> None:
+    """Creates or updates the MongoDB record for this Telegram user.
+
+    Best-effort: MongoDB is a supplementary bookkeeping store, not the
+    source of truth for VPN access (Marzban is), so a Mongo outage must
+    never break /start.
+    """
+    if mongo_users_collection is None:
+        return
+    try:
+        now = datetime.now(timezone.utc)
+        mongo_users_collection.update_one(
+            {"telegram_id": telegram_id},
+            {
+                "$set": {
+                    "marzban_username": marzban_username,
+                    "updated_at": now,
+                },
+                "$setOnInsert": {
+                    "telegram_id": telegram_id,
+                    "subscription_type": "free",
+                    "subscription_status": "active",
+                    "created_at": now,
+                },
+            },
+            upsert=True,
+        )
+    except Exception:
+        log.exception("Failed to upsert MongoDB user %s", telegram_id)
 
 
 def get_lang(context: ContextTypes.DEFAULT_TYPE) -> str:
@@ -173,9 +217,11 @@ def get_or_create_user(telegram_id: int) -> tuple[dict, bool]:
     """Returns (user, was_just_created)."""
     token = get_marzban_token()
     user = find_user_by_telegram_id(telegram_id, token)
-    if user is not None:
-        return user, False
-    return create_disabled_user_for_telegram(telegram_id, token), True
+    just_created = user is None
+    if just_created:
+        user = create_disabled_user_for_telegram(telegram_id, token)
+    upsert_mongo_user(telegram_id, user["username"])
+    return user, just_created
 
 
 def build_home_text(lang: str, user: dict, telegram_id: int, just_created: bool) -> str:
