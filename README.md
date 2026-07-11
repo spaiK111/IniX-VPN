@@ -91,12 +91,15 @@ Every `/start` also upserts a record in a MongoDB `users` collection (`telegram_
 
 The Remnawave Panel/Node/Traefik/Postgres/Redis stack itself is *not* built or deployed by this pipeline - it runs official upstream images (no custom patches needed, unlike Marzban), managed directly on the VPS via compose files under `/opt/remnawave/` that aren't tracked in this repo.
 
+**The deploy step does not sync [`docker-compose.yml`](docker-compose.yml) from this repo to the VPS** - it only runs `docker compose pull && docker compose up -d` against whatever `docker-compose.yml` already exists in `/opt/remnawave/` on the server. If the bot service definition changes here (e.g. the image tag), that file has to be updated on the VPS by hand to match, or the deploy step will silently keep using the stale version.
+
 The GHCR package is public (no secrets baked into the image - the bot token, Remnawave API token and MongoDB URI all live in `bot.env` on the VPS only, outside of git).
 
 ## Repository layout
 
 ```
-docker-compose.yml                # telegram-bot service (deployed as-is to the VPS, /opt/remnawave)
+docker-compose.yml                # telegram-bot service definition - mirrors, but is not
+                                   # auto-synced to, /opt/remnawave/docker-compose.yml on the VPS
 bot/
   bot.py                          # Telegram bot
   i18n.py                         # EN/DE/RU translations
