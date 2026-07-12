@@ -20,6 +20,16 @@ jobs:
           target: "/opt/remnawave"
           strip_components: 1
 
+      - name: Sync Bedolaga's docker-compose.yml to the VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_DEPLOY_KEY }}
+          source: "bedolaga/docker-compose.yml"
+          target: "/opt/bedolaga"
+          strip_components: 1
+
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1
         with:
@@ -34,3 +44,6 @@ jobs:
             docker compose -f docker-compose.subpage.yml up -d
             docker compose -f docker-compose.node.yml up -d
             docker image prune -f
+
+            cd /opt/bedolaga
+            docker compose -f docker-compose.yml up -d

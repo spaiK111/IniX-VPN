@@ -90,7 +90,7 @@ The bot is [BEDOLAGA-DEV/remnawave-bedolaga-telegram-bot](https://github.com/BED
 
 **Explicitly left off for now**: the Cabinet web portal, support ticket system, referral withdrawals, admin reports/notifications, SMTP email, and every payment provider except Stars. Each is a real, working feature in Bedolaga - just not something we asked for yet. Turning one on is a config change in `/opt/bedolaga/.env` plus a container restart, not a code change.
 
-**Deployment**: cloned directly on the VPS at `/opt/bedolaga/` (own git history, updated via `git pull` + `docker compose up -d --build` when a new version is wanted) rather than vendored into this repo - same reasoning as not vendoring the subscription-page source (see git history): it's upstream code we don't maintain, and a nested clone would just be dead weight here. `.env` (real secrets: bot token, Remnawave API token, Postgres/Redis credentials) lives only on the VPS.
+**Deployment**: the application source is cloned directly on the VPS at `/opt/bedolaga/` (own git history, updated via `git pull` + `docker compose up -d --build` when a new version is wanted) rather than vendored into this repo - same reasoning as not vendoring the subscription-page source (see git history): it's upstream code we don't maintain, and a nested clone would just be dead weight here. `.env` (real secrets: bot token, Remnawave API token, Postgres/Redis credentials) lives only on the VPS. `bedolaga/docker-compose.yml` **is** tracked in this repo, though, and synced by CI/CD like the rest of `remnawave/` (see "CI/CD" below) - it's our deployment config, distinct from the upstream application code it launches. It has one deliberate change from upstream: the Dockerfile's built-in `HEALTHCHECK` hits `:8080/health`, which only responds when `WEB_API_ENABLED=true` (off here - see above), so it's explicitly disabled (`healthcheck: disable: true`) rather than left permanently "unhealthy" for a subsystem we're not running.
 
 **MongoDB Atlas** (used for supplementary bookkeeping by the old bot) is no longer written to - Bedolaga keeps its own user/subscription state in its dedicated Postgres database instead. The old MongoDB data isn't actively deleted, just no longer updated.
 
@@ -99,11 +99,12 @@ The bot is [BEDOLAGA-DEV/remnawave-bedolaga-telegram-bot](https://github.com/BED
 [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml): on every push to `main`,
 
 1. Copies the whole [`remnawave/`](remnawave/) directory to `/opt/remnawave/` on the VPS (`appleboy/scp-action`, plain recursive copy - only adds/overwrites the files it brings, never deletes anything already there, so the real `.env` files that live only on the server are never touched)
-2. SSHes in and runs `docker compose -f <file> up -d` for each stack, in dependency order (`docker-compose-prod.yml` first - it's what creates the shared `remnawave-network` the others join)
+2. Copies [`bedolaga/docker-compose.yml`](bedolaga/docker-compose.yml) to `/opt/bedolaga/docker-compose.yml` the same way
+3. SSHes in and runs `docker compose -f <file> up -d` for each Remnawave stack, in dependency order (`docker-compose-prod.yml` first - it's what creates the shared `remnawave-network` the others join), then the same for Bedolaga's compose file
 
 The Remnawave Panel/Node/Traefik/Postgres/Redis/subscription-page stack runs official upstream images - no custom patches or builds needed (unlike Marzban), just `image:` references in the compose files. `docker compose up -d` is idempotent: nothing gets recreated unless its config actually changed.
 
-**Bedolaga (the bot) is not part of this pipeline** - it's third-party code living at `/opt/bedolaga/` on the VPS, own git clone, updated by hand (see "Telegram bot" above).
+**Only Bedolaga's `docker-compose.yml` is synced by this pipeline - its application source isn't.** The pipeline never runs `--build`, so it always reuses whichever image was last built by hand on the VPS (`cd /opt/bedolaga && git pull && docker compose up -d --build`) - pushing a `bedolaga/docker-compose.yml` change here redeploys config (env, volumes, healthcheck, etc.) against that existing image, it doesn't pull or build new Bedolaga source.
 
 ## Repository layout
 
@@ -122,6 +123,11 @@ remnawave/
   .env.sample                   # Panel secrets template
   node.env.sample
   subpage.env.sample
+bedolaga/
+  docker-compose.yml            # deployment config for the Bedolaga bot (see below) -
+                                 # the application source itself is not here, only on the VPS
+  .env.sample                   # curated subset of the ~150 vars we actually set;
+                                 # see /opt/bedolaga/.env.example on the VPS for the full list
 bot/
   bot.py                        # OLD bot - no longer deployed, kept as historical reference
   i18n.py
@@ -129,13 +135,13 @@ bot/
   requirements.txt
 assets/
   logo.png                      # unused leftover from the Marzban-era subscription page
-.github/workflows/deploy.yml    # Deploy pipeline (remnawave/ stack only, not Bedolaga)
+.github/workflows/deploy.yml    # Deploy pipeline (remnawave/ stack + Bedolaga's compose file)
 ```
 
 ## Not tracked in git (live only on the VPS)
 
 - `/opt/remnawave/.env`, `node.env`, `subpage.env` - real secrets (Postgres/Redis/JWT secrets, Remnawave API tokens, node cert/key bundle). Each has a `*.env.sample` counterpart in [`remnawave/`](remnawave/) documenting the required keys.
-- `/opt/bedolaga/` - Bedolaga's entire source (its own git clone) plus its real `.env` (bot token, Remnawave API token, its own Postgres/Redis credentials) - see "Telegram bot" above.
+- `/opt/bedolaga/` - Bedolaga's actual application source (its own git clone, updated by hand) plus its real `.env` - see "Telegram bot" above. Its `docker-compose.yml` **is** tracked (in [`bedolaga/`](bedolaga/) here), everything else in that directory isn't.
 - `/opt/remnawave/xray/share/zapret.dat` - the actual blocklist data (~35MB), downloaded by `refresh-zapret.sh` (which *is* tracked) rather than committed
 - `/etc/letsencrypt/` - TLS certificates (mounted read-only into the Traefik and Node containers)
 - nginx config (`/etc/nginx/stream.conf`, `/etc/nginx/sites-available/inix-vpn.com`) - the SNI routing and ACME webroot setup were configured directly on the server, not via this repo
