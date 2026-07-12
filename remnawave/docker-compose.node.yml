@@ -5,6 +5,8 @@ services:
     image: remnawave/node:latest
     restart: always
     network_mode: host
+    cap_add:
+      - NET_ADMIN
     env_file: node.env
     volumes:
       - /etc/letsencrypt:/etc/letsencrypt:ro

@@ -153,6 +153,12 @@ This is pushed to the Panel via `PATCH /api/subscription-templates` (`encodedTem
 
 If real multi-location routing is added later (proxy chaining, per-region groups, `select-random-proxy`/`shuffle-proxies-order` from [Remnawave's Mihomo template docs](https://docs.rw/guides/templates/mihomo)), that's the point to also start giving Host remarks a location prefix (e.g. `DE-1 | VLESS-Reality`) so groups can filter by it - not done now since it'd be meaningless with only one physical server.
 
+## Torrent Blocker node plugin
+
+[Remnawave Node Plugins](https://docs.rw/learn/node-plugins) run on the Node itself and filter traffic via `nftables` at the kernel level. Only the Torrent Blocker is enabled (Ingress/Egress Filter and Connection Drop are separate opt-in decisions, not turned on). When active, the Node automatically adds an Xray-core routing rule matching BitTorrent traffic - no manual Xray config needed. When Xray-core detects a match, it webhooks the Node, which blocks the source IP via `nftables` and drops the existing connection via `conntrack` for `blockDuration` seconds (currently 3,600 - one hour), no IP exemptions configured.
+
+Requires `cap_add: NET_ADMIN` on the `remnanode` container (see [`remnawave/docker-compose.node.yml`](remnawave/docker-compose.node.yml)) so it can manage the host's firewall rules from inside the container. The plugin itself - like the RU Zapret routing rule and the Mihomo template - is configured via the API into Remnawave's database, not a file: `POST`/`PATCH /api/node-plugins` creates and configures it, then the node's `activePluginUuid` (set via `PATCH /api/nodes`) attaches it. Verify it's live via `nft list table ip remnanode` on the VPS (shows the `torrent-blocker` set and its drop rule in the `input`/`forward` chains) or `GET /api/node-plugins/torrent-blocker/stats` on the Panel.
+
 ## Known trade-offs
 
 - Remnawave's Xray-core build doesn't support VMess at all (hard validation error, not just undocumented) - Hysteria2 was chosen as the replacement 4th protocol.
