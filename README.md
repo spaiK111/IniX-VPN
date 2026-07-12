@@ -115,6 +115,8 @@ remnawave/
   traefik-dynamic.yml           # Traefik routing rules + TLS cert paths
   branding/logo.svg             # served at https://inix-vpn.com/branding/logo.svg
   xray/refresh-zapret.sh        # daily cron script, see "RU Zapret blocklist" below
+  subscription-templates/
+    mihomo.yaml                 # custom Mihomo/Clash Meta client template, see below
   .env.sample                   # Panel secrets template
   bot.env.sample
   node.env.sample
@@ -142,6 +144,14 @@ assets/
 The production config profile's Xray routing blackholes two domain lists from [`kutovoys/ru_gov_zapret`](https://github.com/kutovoys/ru_gov_zapret) (`ext:zapret.dat:zapret` - domains blocked in Russia by Roskomnadzor, and `:zapret-zapad` - foreign resources that don't serve Russian IPs). This isn't about restricting what our users can reach - it's server self-protection: DPI systems used for Russian internet filtering are known to probe suspicious servers by testing whether they'll route traffic to known-RKN-blocked domains, and a VPN node that happily does so is a more visible target for getting its own IP blocked. Refusing to route there makes the node less interesting to that kind of probe.
 
 Mechanically: `zapret.dat` is downloaded to `/opt/remnawave/xray/share/` on the VPS and bind-mounted read-only into the `remnanode` container at `/usr/local/bin/zapret.dat` (see [`remnawave/docker-compose.node.yml`](remnawave/docker-compose.node.yml)). The production config profile's `routing.rules` references it by that filename - that part lives in Remnawave's database, set via the API, not in any file here. A daily cron job (`0 4 * * *`, logs to `/var/log/zapret-refresh.log`, script at [`remnawave/xray/refresh-zapret.sh`](remnawave/xray/refresh-zapret.sh)) re-downloads the file, and only if it actually changed, replaces it and force-restarts the node so Xray-core reloads it.
+
+## Mihomo (Clash Meta) subscription template
+
+Mihomo/Clash Meta clients get a generated YAML config automatically - Remnawave detects them by User-Agent and renders one from a stored template, no setup needed. [`remnawave/subscription-templates/mihomo.yaml`](remnawave/subscription-templates/mihomo.yaml) is a small customization of Remnawave's built-in default: it adds a second `⚡ Auto (fastest)` proxy group (Mihomo's native `url-test` type) alongside the default `→ Remnawave` manual select group. Both groups get every current host's proxies injected automatically (matched by remark) - with a single node/location today that's not very different from the default, but neither group needs any edits when more nodes get added later; new hosts just start showing up in both on the next subscription fetch.
+
+This is pushed to the Panel via `PATCH /api/subscription-templates` (`encodedTemplateYaml`, base64) - there's no compose file or container to restart, and no CI/CD wiring for it yet, so a template edit here needs to be re-applied by hand until/unless that's automated.
+
+If real multi-location routing is added later (proxy chaining, per-region groups, `select-random-proxy`/`shuffle-proxies-order` from [Remnawave's Mihomo template docs](https://docs.rw/guides/templates/mihomo)), that's the point to also start giving Host remarks a location prefix (e.g. `DE-1 | VLESS-Reality`) so groups can filter by it - not done now since it'd be meaningless with only one physical server.
 
 ## Known trade-offs
 
