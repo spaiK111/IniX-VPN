@@ -19,45 +19,53 @@ A self-hosted VPN service built on [Remnawave](https://github.com/remnawave/pane
    SNI ==    │           │  SNI != inix-vpn.com
 inix-vpn.com │           │  (Reality decoy / anything else)
             ▼           ▼                  │
-   ┌─────────────────┐ ┌──────────────────────────────────────────┐
-   │ Traefik (HTTPS)  │ │           Remnawave Node (Xray-core)      │
-   │ 127.0.0.1:8543   │ │  VLESS+Reality   127.0.0.1:8444 (→:443)   │
-   └────────┬─────────┘ │  Hysteria2       0.0.0.0:8880 (udp)       │
-            │           │  Trojan+TLS      0.0.0.0:2096              │
-            ▼           │  Shadowsocks     0.0.0.0:8388              │
-   ┌─────────────────┐  └──────────────────────────────────────────┘
-   │ Remnawave Panel  │             ▲
-   │ - Admin panel    │             │ control channel (:2222)
-   │ - REST API       │◄────────────┘
-   │ - /api/sub/*     │
-   └────────┬─────────┘
-            │ Postgres + Redis (internal)
-            │ REST API (public, HTTPS)
-            │
-   ┌────────┴─────────┐        ┌──────────────────────┐
-   │   Telegram Bot     │◄─────►│   MongoDB Atlas        │
-   │  (polling, no      │       │  supplementary user     │
-   │   public port)     │       │  bookkeeping             │
-   └────────────────────┘       └──────────────────────┘
+   ┌──────────────────┐ ┌──────────────────────────────────────────┐
+   │ Traefik (HTTPS)   │ │           Remnawave Node (Xray-core)      │
+   │ 127.0.0.1:8543    │ │  VLESS+Reality   127.0.0.1:8444 (→:443)   │
+   │ Host-based route  │ │  Hysteria2       0.0.0.0:8880 (udp)       │
+   └──┬────────────┬───┘ │  Trojan+TLS      0.0.0.0:2096              │
+      │            │     │  Shadowsocks     0.0.0.0:8388              │
+      ▼            ▼     └──────────────────────────────────────────┘
+   ┌─────────┐ ┌───────────────┐               ▲
+   │Remnawave │ │ Subscription   │               │ control channel (:2222)
+   │Panel     │ │ page           │               │
+   │- Admin UI│ │ (HTML or raw   │◄──────────────┘
+   │- REST API│◄┤  config, based │
+   │- /api/*  │ │  on requester) │
+   └────┬─────┘ └───────────────┘
+        │ Postgres + Redis (internal)
+        │ REST API (public, HTTPS)
+        │
+   ┌────┴──────────────┐        ┌──────────────────────┐
+   │   Telegram Bot      │◄─────►│   MongoDB Atlas        │
+   │  (polling, no       │       │  supplementary user     │
+   │   public port)      │       │  bookkeeping             │
+   └─────────────────────┘       └──────────────────────┘
 ```
 
 The VPS runs the following behind a single public IP:
 
 1. **nginx** owns ports 80 and 443. On 443 it does TLS-unaware SNI routing (`ssl_preread`) - it never terminates TLS itself for VPN traffic, it just peeks at the requested hostname in the TLS ClientHello and forwards the raw byte stream:
-   - SNI `inix-vpn.com` → Traefik, which terminates TLS (real Let's Encrypt cert) and reverse-proxies to the Remnawave Panel
+   - SNI `inix-vpn.com` or `sub.inix-vpn.com` → Traefik, which terminates TLS (real Let's Encrypt certs, one per domain) and reverse-proxies by `Host` header to the Panel or the subscription page respectively
    - Anything else (including Reality's decoy SNI, `www.cloudflare.com`) → the Remnawave Node's VLESS+Reality inbound
 
-   Port 80 only serves ACME HTTP-01 challenges for Let's Encrypt certificate renewal (`certbot renew`, webroot method).
+   Port 80 only serves ACME HTTP-01 challenges for Let's Encrypt certificate renewal (`certbot renew`, webroot method) for both domains.
 
-2. **Remnawave** is split into two containers, unlike Marzban's single-container design:
-   - **Panel** (`remnawave/backend`, + Postgres + Redis) - the admin dashboard, REST API, and the `/api/sub/<shortUuid>` subscription endpoint that VPN clients (e.g. Happ) fetch directly. Reachable only through Traefik - Remnawave's `ProxyCheckMiddleware` rejects any request that doesn't come through a properly configured reverse proxy with forwarded headers.
+2. **Remnawave** is split into three containers, unlike Marzban's single-container design:
+   - **Panel** (`remnawave/backend`, + Postgres + Redis) - the admin dashboard and REST API. Reachable only through Traefik - Remnawave's `ProxyCheckMiddleware` rejects any request that doesn't come through a properly configured reverse proxy with forwarded headers.
    - **Node** (`remnawave/node`) - runs Xray-core itself and the actual protocol inbounds. Runs with `network_mode: host` (it needs to bind real proxy ports directly) and is addressed by the Panel via the VPS's public IP over a private control port (`2222`).
+   - **Subscription page** (`remnawave/subscription-page`) - a separate frontend, on its own subdomain (`sub.inix-vpn.com`), that turns a subscription link into either a browsable HTML page (QR codes, per-platform install info) or a raw config, depending on who's asking - see below.
 
-   Both are colocated on the same VPS as Marzban was. Traefik uses its **file provider** (static YAML, no Docker socket needed) rather than Docker-based service discovery.
+   All three are colocated on the same VPS as Marzban was. Traefik uses its **file provider** (static YAML, no Docker socket needed) rather than Docker-based service discovery.
 
 3. **The Telegram bot** ([`bot/`](bot/)) is a separate container that talks to the Panel's public HTTPS API (`https://inix-vpn.com`) - it can't call the Panel directly over the internal Docker network because of the reverse-proxy check mentioned above. It never listens on a public port itself (long-polling only).
 
-Remnawave's default subscription page (`remnawave/subscription-page`) is deployed on the VPS for internal testing but not yet exposed publicly - the bot and VPN clients use the raw `/api/sub/<shortUuid>` subscription URL directly, which is enough for apps like Happ to import all protocols. Wiring up a public, branded subscription page is a possible follow-up.
+Every user's `subscriptionUrl` looks like `https://sub.inix-vpn.com/<shortUuid>` - a single link that serves two different things from the same URL, based on the requester:
+
+- **A browser** (the bot's "Connect" button, or a link tapped by hand) gets the subscription page's rendered HTML - status, traffic, expiry, and (depending on config) QR codes/install instructions.
+- **A VPN client** (Happ, v2rayNG, etc., identified by `Accept`/`User-Agent`) gets the raw base64/YAML config with the actual connection details for all 4 protocols.
+
+The subscription page needs its **own subdomain** rather than sharing a path on `inix-vpn.com` - it was tried first (`PathPrefix(/sub)` + `CUSTOM_SUB_PREFIX`), but both the Panel's dashboard and the subscription page serve their static JS/CSS bundles from an identical, non-configurable `/assets/*` path, so path-based routing made one of them load the other's (broken) assets. A separate `Host()` rule per subdomain avoids the collision entirely, at the cost of one extra DNS record and Let's Encrypt certificate. The subscription page also gate-checks `/assets/*` and `/locales/*` requests against a short-lived session cookie set on the initial page load (anti-hotlinking) - this only matters if you're testing it with `curl`, real browsers carry the cookie automatically. The Panel's own lower-level endpoint, `/api/sub/<shortUuid>` on `inix-vpn.com`, still exists directly and keeps working (older imported links using it, e.g. from before the subscription page was wired up, don't break).
 
 ## Supported protocols
 
@@ -121,4 +129,4 @@ assets/
 ## Known trade-offs
 
 - Remnawave's Xray-core build doesn't support VMess at all (hard validation error, not just undocumented) - Hysteria2 was chosen as the replacement 4th protocol.
-- The subscription page is Remnawave's unmodified default (no custom branding yet, and not yet exposed publicly) - branding parity with the old custom-built design (dark theme, per-platform install guide) is a deferred follow-up.
+- The subscription page is Remnawave's unmodified default (no custom branding) - visual parity with the old custom-built design (dark theme, per-platform install guide) is a deferred follow-up.
