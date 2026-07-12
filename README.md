@@ -1,6 +1,6 @@
 # INIX VPN
 
-A self-hosted VPN service built on [Remnawave](https://github.com/remnawave/panel) / [Xray-core](https://github.com/XTLS/Xray-core), with a Telegram bot for self-service account management.
+A self-hosted VPN service built on [Remnawave](https://github.com/remnawave/panel) / [Xray-core](https://github.com/XTLS/Xray-core), with [Bedolaga](https://github.com/BEDOLAGA-DEV/remnawave-bedolaga-telegram-bot) as the Telegram bot for account management and sales.
 
 ## Architecture
 
@@ -36,11 +36,13 @@ inix-vpn.com │           │  (Reality decoy / anything else)
         │ Postgres + Redis (internal)
         │ REST API (public, HTTPS)
         │
-   ┌────┴──────────────┐        ┌──────────────────────┐
-   │   Telegram Bot      │◄─────►│   MongoDB Atlas        │
-   │  (polling, no       │       │  supplementary user     │
-   │   public port)      │       │  bookkeeping             │
-   └─────────────────────┘       └──────────────────────┘
+   ┌────┴──────────────────────────────┐
+   │   Bedolaga (Telegram Bot)           │
+   │  polling, no public port -          │
+   │  own Postgres + Redis (isolated      │
+   │  from the Panel's), third-party      │
+   │  code at /opt/bedolaga/, not in git   │
+   └───────────────────────────────────┘
 ```
 
 The VPS runs the following behind a single public IP:
@@ -58,7 +60,7 @@ The VPS runs the following behind a single public IP:
 
    All three are colocated on the same VPS as Marzban was. Traefik uses its **file provider** (static YAML, no Docker socket needed) rather than Docker-based service discovery.
 
-3. **The Telegram bot** ([`bot/`](bot/)) is a separate container that talks to the Panel's public HTTPS API (`https://inix-vpn.com`) - it can't call the Panel directly over the internal Docker network because of the reverse-proxy check mentioned above. It never listens on a public port itself (long-polling only).
+3. **Bedolaga**, the Telegram bot, is a separate stack (its own container + dedicated Postgres + Redis) that talks to the Panel's public HTTPS API (`https://inix-vpn.com`) - it can't call the Panel directly over the internal Docker network because of the reverse-proxy check mentioned above. It never listens on a public port itself (long-polling only).
 
 Every user's `subscriptionUrl` looks like `https://sub.inix-vpn.com/<shortUuid>` - a single link that serves two different things from the same URL, based on the requester:
 
@@ -78,35 +80,35 @@ Every user gets all four, each on its own port:
 | Trojan + TLS | 2096 | Uses the real `inix-vpn.com` certificate |
 | Shadowsocks | 8388 | No TLS; AEAD-encrypted |
 
-## Telegram bot
+## Telegram bot (Bedolaga)
 
-Source: [`bot/bot.py`](bot/bot.py), translations in [`bot/i18n.py`](bot/i18n.py) (English/German/Russian).
+The bot is [BEDOLAGA-DEV/remnawave-bedolaga-telegram-bot](https://github.com/BEDOLAGA-DEV/remnawave-bedolaga-telegram-bot) - **third-party code, not ours**. It replaced an earlier bespoke bot ([`bot/`](bot/), kept in git only as historical reference - no longer deployed, not part of the CI/CD pipeline). Bedolaga is a full sales/management platform (Python 3.13, aiogram 3.x, PostgreSQL, Redis, FastAPI), a much bigger surface than the simple self-service bot it replaced: subscription tiers, trial periods, promo codes, referral program, 24+ payment providers, an in-Telegram admin panel, an optional web "Cabinet" portal, and more.
 
-- `/start` - looks up the caller's Remnawave account by their Telegram ID, using Remnawave's native `telegramId` field (unlike Marzban, which had no such field and needed the free-text `note` field as a workaround). If none exists, it auto-creates one assigned to the production internal squad but `status: DISABLED`, pending manual admin approval.
-- **Info** - shows the subscription URL (paste into a VPN client app), expiry and traffic usage.
-- **Status** - checks whether the Remnawave panel and the VPN port respond.
-- **Connect** - a direct link button to the user's subscription URL, only shown when their Remnawave status is `ACTIVE`.
-- **Language** - persists a per-user language choice (English/German/Russian) via `PicklePersistence`, mounted on a volume so it survives redeploys.
+**What's actually enabled here** (deliberately minimal on first rollout - see the plan history for the full reasoning):
+- Core VPN account management via the Remnawave API (`REMNAWAVE_AUTH_TYPE=api_key`), assigning new users to the `production` internal squad
+- **Telegram Stars** as the only payment provider - it's native to the Telegram Bot API and needs no external merchant account, unlike the other 23+ providers Bedolaga supports (YooKassa, CryptoBot, Freekassa, etc. - all real integrations, just not configured, since we don't have accounts with any of them yet)
 
-Every `/start` also upserts a record in a MongoDB `users` collection (`telegram_id`, `marzban_username` - historical field name, holds the Remnawave username, `subscription_type`, `subscription_status`, timestamps). This is a **supplementary bookkeeping store only** - Remnawave remains the sole source of truth for actual VPN access. A MongoDB outage is logged and swallowed; it never blocks `/start`.
+**Explicitly left off for now**: the Cabinet web portal, support ticket system, referral withdrawals, admin reports/notifications, SMTP email, and every payment provider except Stars. Each is a real, working feature in Bedolaga - just not something we asked for yet. Turning one on is a config change in `/opt/bedolaga/.env` plus a container restart, not a code change.
+
+**Deployment**: cloned directly on the VPS at `/opt/bedolaga/` (own git history, updated via `git pull` + `docker compose up -d --build` when a new version is wanted) rather than vendored into this repo - same reasoning as not vendoring the subscription-page source (see git history): it's upstream code we don't maintain, and a nested clone would just be dead weight here. `.env` (real secrets: bot token, Remnawave API token, Postgres/Redis credentials) lives only on the VPS.
+
+**MongoDB Atlas** (used for supplementary bookkeeping by the old bot) is no longer written to - Bedolaga keeps its own user/subscription state in its dedicated Postgres database instead. The old MongoDB data isn't actively deleted, just no longer updated.
 
 ## CI/CD
 
 [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml): on every push to `main`,
 
-1. Builds and pushes the bot image to GHCR: `ghcr.io/spaik111/vpn-service-bot`
-2. Copies the whole [`remnawave/`](remnawave/) directory to `/opt/remnawave/` on the VPS (`appleboy/scp-action`, plain recursive copy - only adds/overwrites the files it brings, never deletes anything already there, so the real `.env` files that live only on the server are never touched)
-3. SSHes in and runs `docker compose -f <file> up -d` for each stack, in dependency order (`docker-compose-prod.yml` first - it's what creates the shared `remnawave-network` the others join), then pulls and restarts the bot
+1. Copies the whole [`remnawave/`](remnawave/) directory to `/opt/remnawave/` on the VPS (`appleboy/scp-action`, plain recursive copy - only adds/overwrites the files it brings, never deletes anything already there, so the real `.env` files that live only on the server are never touched)
+2. SSHes in and runs `docker compose -f <file> up -d` for each stack, in dependency order (`docker-compose-prod.yml` first - it's what creates the shared `remnawave-network` the others join)
 
 The Remnawave Panel/Node/Traefik/Postgres/Redis/subscription-page stack runs official upstream images - no custom patches or builds needed (unlike Marzban), just `image:` references in the compose files. `docker compose up -d` is idempotent: nothing gets recreated unless its config actually changed.
 
-The GHCR bot package is public (no secrets baked into the image - the bot token, Remnawave API token and MongoDB URI all live in `bot.env` on the VPS only, outside of git).
+**Bedolaga (the bot) is not part of this pipeline** - it's third-party code living at `/opt/bedolaga/` on the VPS, own git clone, updated by hand (see "Telegram bot" above).
 
 ## Repository layout
 
 ```
 remnawave/
-  docker-compose.yml            # telegram-bot
   docker-compose-prod.yml       # Panel + Postgres + Redis (official Remnawave file)
   docker-compose.traefik.yml    # reverse proxy (file provider, no Docker socket)
   docker-compose.node.yml       # Xray-core node
@@ -118,22 +120,22 @@ remnawave/
   subscription-templates/
     mihomo.yaml                 # custom Mihomo/Clash Meta client template, see below
   .env.sample                   # Panel secrets template
-  bot.env.sample
   node.env.sample
   subpage.env.sample
 bot/
-  bot.py                        # Telegram bot
-  i18n.py                       # EN/DE/RU translations
+  bot.py                        # OLD bot - no longer deployed, kept as historical reference
+  i18n.py
   Dockerfile
   requirements.txt
 assets/
   logo.png                      # unused leftover from the Marzban-era subscription page
-.github/workflows/deploy.yml    # Build + deploy pipeline
+.github/workflows/deploy.yml    # Deploy pipeline (remnawave/ stack only, not Bedolaga)
 ```
 
 ## Not tracked in git (live only on the VPS)
 
-- `/opt/remnawave/.env`, `bot.env`, `node.env`, `subpage.env` - real secrets (Postgres/Redis/JWT secrets, Telegram bot token, Remnawave API tokens, node cert/key bundle, MongoDB URI). Each has a `*.env.sample` counterpart in [`remnawave/`](remnawave/) documenting the required keys.
+- `/opt/remnawave/.env`, `node.env`, `subpage.env` - real secrets (Postgres/Redis/JWT secrets, Remnawave API tokens, node cert/key bundle). Each has a `*.env.sample` counterpart in [`remnawave/`](remnawave/) documenting the required keys.
+- `/opt/bedolaga/` - Bedolaga's entire source (its own git clone) plus its real `.env` (bot token, Remnawave API token, its own Postgres/Redis credentials) - see "Telegram bot" above.
 - `/opt/remnawave/xray/share/zapret.dat` - the actual blocklist data (~35MB), downloaded by `refresh-zapret.sh` (which *is* tracked) rather than committed
 - `/etc/letsencrypt/` - TLS certificates (mounted read-only into the Traefik and Node containers)
 - nginx config (`/etc/nginx/stream.conf`, `/etc/nginx/sites-available/inix-vpn.com`) - the SNI routing and ACME webroot setup were configured directly on the server, not via this repo
