@@ -115,13 +115,15 @@ bot/
   requirements.txt
 assets/
   logo.png                        # kept for a future branded subscription page
+  IniX-icon.svg                   # served at https://inix-vpn.com/branding/logo.svg,
+                                   # set as the Panel's logo in its Branding settings
 .github/workflows/deploy.yml      # Build + deploy pipeline (bot only)
 ```
 
 ## Not tracked in git (live only on the VPS)
 
 - `bot.env` - secrets (Telegram bot token, Remnawave API token, MongoDB URI, etc.)
-- `/opt/remnawave/` - the Remnawave stack's compose files, `.env` (Postgres/Redis/JWT secrets), Traefik config
+- `/opt/remnawave/` - the Remnawave stack's compose files, `.env` (Postgres/Redis/JWT secrets), Traefik config, `branding/` (static files served by a small `nginx:alpine` container at `inix-vpn.com/branding/*` - currently just the Panel logo, copied by hand from `assets/IniX-icon.svg`, not auto-synced)
 - `/etc/letsencrypt/` - TLS certificates (mounted read-only into the Traefik and Node containers)
 - nginx config (`/etc/nginx/stream.conf`, `/etc/nginx/sites-available/inix-vpn.com`) - the SNI routing and ACME webroot setup were configured directly on the server, not via this repo
 - `/var/lib/marzban/` - the old Marzban SQLite database and Xray config, kept only as a historical record of pre-migration user data; no longer used by anything running

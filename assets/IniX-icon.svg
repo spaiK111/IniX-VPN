@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="220" height="220" viewBox="0 0 220 220" fill="none">
+  <defs>
+    <radialGradient id="bg" cx="30%" cy="20%" r="120%">
+      <stop offset="0%" stop-color="#202227"></stop>
+      <stop offset="70%" stop-color="#0d0e11"></stop>
+    </radialGradient>
+  </defs>
+  <rect x="1" y="1" width="218" height="218" rx="52" fill="url(#bg)" stroke="#3bc9db" stroke-opacity="0.55" stroke-width="1.5"></rect>
+  <text x="110" y="112" text-anchor="middle" dominant-baseline="central" font-family="&#39;Space Grotesk&#39;, sans-serif" font-weight="600" font-size="100" letter-spacing="-3">
+    <tspan fill="#f2f0ea">i</tspan><tspan fill="#3bc9db">X</tspan>
+  </text>
+</svg>
