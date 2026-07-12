@@ -1,6 +1,7 @@
 services:
   telegram-bot:
     image: ghcr.io/spaik111/vpn-service-bot:latest
+    container_name: remnawave-telegram-bot
     restart: always
     env_file: bot.env
     network_mode: host
