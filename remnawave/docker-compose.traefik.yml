@@ -1,0 +1,22 @@
+services:
+  traefik:
+    image: traefik:v3.1
+    container_name: remnawave-traefik
+    restart: always
+    command:
+      - "--providers.file.directory=/etc/traefik/dynamic"
+      - "--providers.file.watch=true"
+      - "--entrypoints.websecure.address=:8543"
+      - "--api.insecure=false"
+      - "--log.level=INFO"
+    ports:
+      - "127.0.0.1:8543:8543"
+    volumes:
+      - ./traefik-dynamic.yml:/etc/traefik/dynamic/dynamic.yml:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    networks:
+      - remnawave-network
+
+networks:
+  remnawave-network:
+    external: true

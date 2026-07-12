@@ -1,4 +1,4 @@
-name: Build and Deploy Telegram Bot
+name: Build and Deploy
 
 on:
   push:
@@ -29,6 +29,18 @@ jobs:
     needs: build-and-push
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+
+      - name: Sync Remnawave stack config to VPS
+        uses: appleboy/scp-action@v0.1.7
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_DEPLOY_KEY }}
+          source: "remnawave/*"
+          target: "/opt/remnawave"
+          strip_components: 1
+
       - name: Deploy to VPS
         uses: appleboy/ssh-action@v1
         with:
@@ -37,6 +49,11 @@ jobs:
           key: ${{ secrets.VPS_DEPLOY_KEY }}
           script: |
             cd /opt/remnawave
-            docker compose pull
-            docker compose up -d
+            docker compose -f docker-compose-prod.yml up -d
+            docker compose -f docker-compose.traefik.yml up -d
+            docker compose -f docker-compose.branding.yml up -d
+            docker compose -f docker-compose.subpage.yml up -d
+            docker compose -f docker-compose.node.yml up -d
+            docker compose -f docker-compose.yml pull
+            docker compose -f docker-compose.yml up -d
             docker image prune -f

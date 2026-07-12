@@ -95,38 +95,53 @@ Every `/start` also upserts a record in a MongoDB `users` collection (`telegram_
 [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml): on every push to `main`,
 
 1. Builds and pushes the bot image to GHCR: `ghcr.io/spaik111/vpn-service-bot`
-2. SSHes into the VPS and runs `docker compose pull && docker compose up -d` in `/opt/remnawave`
+2. Copies the whole [`remnawave/`](remnawave/) directory to `/opt/remnawave/` on the VPS (`appleboy/scp-action`, plain recursive copy - only adds/overwrites the files it brings, never deletes anything already there, so the real `.env` files that live only on the server are never touched)
+3. SSHes in and runs `docker compose -f <file> up -d` for each stack, in dependency order (`docker-compose-prod.yml` first - it's what creates the shared `remnawave-network` the others join), then pulls and restarts the bot
 
-The Remnawave Panel/Node/Traefik/Postgres/Redis stack itself is *not* built or deployed by this pipeline - it runs official upstream images (no custom patches needed, unlike Marzban), managed directly on the VPS via compose files under `/opt/remnawave/` that aren't tracked in this repo.
+The Remnawave Panel/Node/Traefik/Postgres/Redis/subscription-page stack runs official upstream images - no custom patches or builds needed (unlike Marzban), just `image:` references in the compose files. `docker compose up -d` is idempotent: nothing gets recreated unless its config actually changed.
 
-**The deploy step does not sync [`docker-compose.yml`](docker-compose.yml) from this repo to the VPS** - it only runs `docker compose pull && docker compose up -d` against whatever `docker-compose.yml` already exists in `/opt/remnawave/` on the server. If the bot service definition changes here (e.g. the image tag), that file has to be updated on the VPS by hand to match, or the deploy step will silently keep using the stale version.
-
-The GHCR package is public (no secrets baked into the image - the bot token, Remnawave API token and MongoDB URI all live in `bot.env` on the VPS only, outside of git).
+The GHCR bot package is public (no secrets baked into the image - the bot token, Remnawave API token and MongoDB URI all live in `bot.env` on the VPS only, outside of git).
 
 ## Repository layout
 
 ```
-docker-compose.yml                # telegram-bot service definition - mirrors, but is not
-                                   # auto-synced to, /opt/remnawave/docker-compose.yml on the VPS
+remnawave/
+  docker-compose.yml            # telegram-bot
+  docker-compose-prod.yml       # Panel + Postgres + Redis (official Remnawave file)
+  docker-compose.traefik.yml    # reverse proxy (file provider, no Docker socket)
+  docker-compose.node.yml       # Xray-core node
+  docker-compose.branding.yml   # tiny nginx:alpine serving the Panel logo
+  docker-compose.subpage.yml    # subscription page
+  traefik-dynamic.yml           # Traefik routing rules + TLS cert paths
+  branding/logo.svg             # served at https://inix-vpn.com/branding/logo.svg
+  xray/refresh-zapret.sh        # daily cron script, see "RU Zapret blocklist" below
+  .env.sample                   # Panel secrets template
+  bot.env.sample
+  node.env.sample
+  subpage.env.sample
 bot/
-  bot.py                          # Telegram bot
-  i18n.py                         # EN/DE/RU translations
+  bot.py                        # Telegram bot
+  i18n.py                       # EN/DE/RU translations
   Dockerfile
   requirements.txt
 assets/
-  logo.png                        # kept for a future branded subscription page
-  IniX-icon.svg                   # served at https://inix-vpn.com/branding/logo.svg,
-                                   # set as the Panel's logo in its Branding settings
-.github/workflows/deploy.yml      # Build + deploy pipeline (bot only)
+  logo.png                      # unused leftover from the Marzban-era subscription page
+.github/workflows/deploy.yml    # Build + deploy pipeline
 ```
 
 ## Not tracked in git (live only on the VPS)
 
-- `bot.env` - secrets (Telegram bot token, Remnawave API token, MongoDB URI, etc.)
-- `/opt/remnawave/` - the Remnawave stack's compose files, `.env` (Postgres/Redis/JWT secrets), Traefik config, `branding/` (static files served by a small `nginx:alpine` container at `inix-vpn.com/branding/*` - currently just the Panel logo, copied by hand from `assets/IniX-icon.svg`, not auto-synced)
+- `/opt/remnawave/.env`, `bot.env`, `node.env`, `subpage.env` - real secrets (Postgres/Redis/JWT secrets, Telegram bot token, Remnawave API tokens, node cert/key bundle, MongoDB URI). Each has a `*.env.sample` counterpart in [`remnawave/`](remnawave/) documenting the required keys.
+- `/opt/remnawave/xray/share/zapret.dat` - the actual blocklist data (~35MB), downloaded by `refresh-zapret.sh` (which *is* tracked) rather than committed
 - `/etc/letsencrypt/` - TLS certificates (mounted read-only into the Traefik and Node containers)
 - nginx config (`/etc/nginx/stream.conf`, `/etc/nginx/sites-available/inix-vpn.com`) - the SNI routing and ACME webroot setup were configured directly on the server, not via this repo
 - `/var/lib/marzban/` - the old Marzban SQLite database and Xray config, kept only as a historical record of pre-migration user data; no longer used by anything running
+
+## RU Zapret blocklist
+
+The production config profile's Xray routing blackholes two domain lists from [`kutovoys/ru_gov_zapret`](https://github.com/kutovoys/ru_gov_zapret) (`ext:zapret.dat:zapret` - domains blocked in Russia by Roskomnadzor, and `:zapret-zapad` - foreign resources that don't serve Russian IPs). This isn't about restricting what our users can reach - it's server self-protection: DPI systems used for Russian internet filtering are known to probe suspicious servers by testing whether they'll route traffic to known-RKN-blocked domains, and a VPN node that happily does so is a more visible target for getting its own IP blocked. Refusing to route there makes the node less interesting to that kind of probe.
+
+Mechanically: `zapret.dat` is downloaded to `/opt/remnawave/xray/share/` on the VPS and bind-mounted read-only into the `remnanode` container at `/usr/local/bin/zapret.dat` (see [`remnawave/docker-compose.node.yml`](remnawave/docker-compose.node.yml)). The production config profile's `routing.rules` references it by that filename - that part lives in Remnawave's database, set via the API, not in any file here. A daily cron job (`0 4 * * *`, logs to `/var/log/zapret-refresh.log`, script at [`remnawave/xray/refresh-zapret.sh`](remnawave/xray/refresh-zapret.sh)) re-downloads the file, and only if it actually changed, replaces it and force-restarts the node so Xray-core reloads it.
 
 ## Known trade-offs
 

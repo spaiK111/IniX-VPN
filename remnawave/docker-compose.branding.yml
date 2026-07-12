@@ -1,0 +1,13 @@
+services:
+  branding:
+    image: nginx:alpine
+    container_name: remnawave-branding
+    restart: always
+    volumes:
+      - ./branding:/usr/share/nginx/html/branding:ro
+    networks:
+      - remnawave-network
+
+networks:
+  remnawave-network:
+    external: true

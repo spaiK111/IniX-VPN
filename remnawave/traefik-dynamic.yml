@@ -1,0 +1,43 @@
+http:
+  routers:
+    remnawave-branding:
+      rule: "Host(`inix-vpn.com`) && PathPrefix(`/branding`)"
+      priority: 100
+      entryPoints:
+        - websecure
+      service: remnawave-branding
+      tls: {}
+    remnawave-subpage:
+      rule: "Host(`sub.inix-vpn.com`)"
+      entryPoints:
+        - websecure
+      service: remnawave-subpage
+      tls: {}
+    remnawave:
+      rule: "Host(`inix-vpn.com`)"
+      priority: 1
+      entryPoints:
+        - websecure
+      service: remnawave
+      tls: {}
+
+  services:
+    remnawave:
+      loadBalancer:
+        servers:
+          - url: "http://remnawave:3000"
+    remnawave-subpage:
+      loadBalancer:
+        servers:
+          - url: "http://remnawave-subscription-page:3010"
+    remnawave-branding:
+      loadBalancer:
+        servers:
+          - url: "http://remnawave-branding:80"
+
+tls:
+  certificates:
+    - certFile: /etc/letsencrypt/live/inix-vpn.com/fullchain.pem
+      keyFile: /etc/letsencrypt/live/inix-vpn.com/privkey.pem
+    - certFile: /etc/letsencrypt/live/sub.inix-vpn.com/fullchain.pem
+      keyFile: /etc/letsencrypt/live/sub.inix-vpn.com/privkey.pem
